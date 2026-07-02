@@ -1,10 +1,21 @@
-export interface DetectedTechnology {
-  name: string;
-  version?: string;
-}
-
-export async function scanProject(projectPath: string): Promise<DetectedTechnology[]> {
-  void projectPath;
-  return [];
-}
+export type { ProjectFile } from './types/ProjectFile.js';
+export type { ProjectFolder } from './types/ProjectFolder.js';
+export type { ProjectManifest } from './types/ProjectManifest.js';
+export type { ProjectScanResult } from './types/ProjectScanResult.js';
+export type { DetectedLanguage } from './types/DetectedLanguage.js';
+export type { DetectedFramework } from './types/DetectedFramework.js';
+export type { DetectedInfrastructure } from './types/DetectedInfrastructure.js';
+export type { DetectedDependency } from './types/DetectedDependency.js';
+export type { PipelineStage } from './pipeline/PipelineStage.js';
+export { Pipeline } from './pipeline/Pipeline.js';
+export { scanProject } from './api/scanProject.js';
+export { detectLanguages } from './language/detectLanguages.js';
+export { detectFrameworks } from './framework/detectFrameworks.js';
+export { detectInfrastructure } from './infrastructure/detectInfrastructure.js';
+export { detectDependencies } from './dependencies/detectDependencies.js';
+export { FilesystemStage } from './stages/FilesystemStage.js';
+export { LanguageStage } from './stages/LanguageStage.js';
+export { FrameworkStage } from './stages/FrameworkStage.js';
+export { InfrastructureStage } from './stages/InfrastructureStage.js';
+export { DependencyStage } from './stages/DependencyStage.js';
 

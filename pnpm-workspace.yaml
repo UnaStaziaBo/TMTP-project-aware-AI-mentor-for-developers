@@ -2,3 +2,6 @@ packages:
   - "apps/*"
   - "packages/*"
   - "examples/*"
+allowBuilds:
+  '@nestjs/core': true
+  esbuild: true

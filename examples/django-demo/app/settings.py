@@ -1,0 +1,3 @@
+SECRET_KEY = 'demo'
+DEBUG = True
+ALLOWED_HOSTS = []

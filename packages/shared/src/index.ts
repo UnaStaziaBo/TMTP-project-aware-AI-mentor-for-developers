@@ -1,9 +1,17 @@
-import type { DetectedTechnology } from "@tmpt/scanner";
+import type { ProjectScanResult } from "@tmpt/scanner";
 
 export async function scanProject(
   projectPath: string
-): Promise<DetectedTechnology[]> {
+): Promise<ProjectScanResult> {
   void projectPath;
 
-  return [];
+  return {
+    files: [],
+    folders: [],
+    manifests: [],
+    languages: [],
+    frameworks: [],
+    infrastructure: [],
+    dependencies: [],
+  };
 }

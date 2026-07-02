@@ -1,91 +1,161 @@
 # TMTP
 
-Teach Me This Project (TMTP) is an open-source, project-aware learning engine for software developers.
+Teach Me This Project (TMTP) is a project-aware AI mentor for software developers.
 
-TMTP is designed to help developers understand unfamiliar codebases by grounding guidance in the structure, technologies, and conventions of the project itself. At this stage, the project is focused on establishing a solid foundation for future capabilities rather than shipping full product features.
+Unlike traditional coding assistants that begin from a prompt, TMTP first understands the software project itself. It analyzes the repository structure, technologies, conventions, and dependencies before offering guidance, so learning support is grounded in the actual codebase.
+
+TMTP is an early open-source project with a completed first milestone: a deterministic project analysis pipeline that can inspect repositories and produce a structured understanding of them.
 
 ## Why TMTP exists
 
-Most developer learning tools are generic and disconnected from the actual repository a person is working in. TMTP aims to change that by creating a system that can interpret a project’s context and provide project-specific learning support over time.
+Most developer tools provide generic answers without understanding the project context. TMTP aims to change that by building a reusable analysis engine that can later support personalized learning, onboarding help, and concept-based guidance.
 
-The project exists to make onboarding, code exploration, and skill development more structured, more contextual, and more useful for real development work.
+The long-term vision is to build:
 
-## Vision
+- a Project Graph
+- a Developer Profile
+- knowledge-gap detection
+- personalized learning recommendations
+- explainable guidance grounded in the repository
 
-The long-term vision for TMTP is simple:
+## Current milestone: Project Analysis Pipeline v0.1
 
-- help developers understand a codebase faster
-- make project-specific learning more actionable
-- reduce the friction of onboarding into unfamiliar systems
-- build a reusable architecture that can evolve with new capabilities
+The first milestone is complete.
 
-## Architecture overview
+### Implemented stages
 
-TMTP is organized as a TypeScript monorepo with a clear separation between client-facing surfaces and core platform logic.
+- ✅ Filesystem Scanner
+  - recursive project scanning
+  - file discovery
+  - folder discovery
+  - manifest detection
+  - ignore rules
 
-- Apps provide user-facing entry points.
-- Packages contain reusable core logic.
-- Shared code holds common contracts and utilities.
-- Examples act as reference repositories for testing and documentation.
+- ✅ Language Detection
+  - Python
+  - TypeScript
+  - Java
+  - evidence-based detection with confidence scores
+
+- ✅ Framework Detection
+  - FastAPI
+  - React
+  - NestJS
+  - Django
+  - Spring Boot
+
+- ✅ Infrastructure Detection
+  - Docker
+  - Docker Compose
+  - GitHub Actions
+  - Kubernetes
+  - Terraform
+  - Dev Containers
+  - Nginx
+
+- ✅ Dependency Detection
+  - Pydantic
+  - SQLAlchemy
+  - React Router
+  - Axios
+  - JWT
+  - Django REST Framework
+  - Spring Security
+
+## Architecture
+
+TMTP uses a deterministic pipeline architecture. Each stage enriches the same project analysis result object.
+
+```text
+Project
+↓
+Filesystem Stage
+↓
+Language Stage
+↓
+Framework Stage
+↓
+Infrastructure Stage
+↓
+Dependency Stage
+↓
+ProjectScanResult
+```
+
+This design keeps the analysis reusable, IDE-independent, and easy to extend. The scanner is intentionally deterministic and does not depend on AI for core project analysis.
 
 ## Repository structure
 
-```text
-TMTP/
-├── apps/
-│   └── vscode-extension/
-├── packages/
-│   ├── scanner/
-│   └── shared/
-├── examples/
-│   ├── fastapi-demo/
-│   ├── react-demo/
-│   ├── spring-demo/
-│   ├── nestjs-demo/
-│   └── django-demo/
-├── docs/
-│   ├── architecture.md
-│   ├── development.md
-│   └── roadmap.md
-├── package.json
-├── pnpm-workspace.yaml
-├── pnpm-lock.yaml
-└── tsconfig.base.json
+- apps/: user-facing applications such as the VS Code extension
+- packages/: reusable core packages
+  - scanner/: the project analysis engine
+  - shared/: shared contracts and utilities
+- examples/: minimal real-world golden projects used as long-term integration fixtures
+- docs/: architecture, development, and roadmap documentation
+
+## Golden projects
+
+The examples directory contains minimal but realistic projects that act as long-term integration fixtures.
+
+Current projects include:
+
+- FastAPI
+- React
+- NestJS
+- Django
+- Spring Boot
+
+## Testing
+
+The scanner currently includes integration tests for each golden project.
+
+Current status:
+
+- 105 integration tests
+- 0 failures
+
+## Running the project
+
+```bash
+pnpm install
+pnpm build
+pnpm --filter @tmpt/scanner test:integration
 ```
 
-## Development philosophy
+## Roadmap
 
-TMTP is being built with a deliberately careful and extensible approach:
+### Completed
 
-- keep the core architecture modular and deterministic
-- avoid coupling core logic to AI providers
-- favor explicit package boundaries over hidden dependencies
-- document planned work clearly so the project remains understandable
-- build the foundation before adding advanced learning features
+- ✅ Level 0 — Monorepo Architecture
+- ✅ Level 1 — Project Scanner
+  - Filesystem
+  - Languages
+  - Frameworks
+  - Infrastructure
+  - Dependencies
 
-## Current project status
+### Upcoming
 
-The repository currently contains the foundation architecture for the project.
+- 🔜 Level 2 — Project Graph
+- 🔜 Level 3 — Concept Usage
+- 🔜 Level 4 — Developer Profile
+- 🔜 Level 5 — Gap Engine
+- 🔜 Level 6 — Learning Recommendation
+- 🔜 Level 7 — Explain Engine
+- 🔜 Level 8 — Learning Progress
+- 🔜 Level 9 — Today Goal
 
-### Implemented
+## Engineering principles
 
-- a TypeScript-based monorepo structure
-- workspace-level package management with pnpm
-- a VS Code extension application shell
-- a scanner package scaffold
-- a shared package scaffold
-- example repository folders for future testing and demos
-- initial documentation files
+TMTP is being built around a few core principles:
 
-### Planned
+- modular pipeline architecture
+- deterministic analysis before AI
+- registry-based detectors
+- evidence-based detection
+- reusable analysis engine
+- IDE-independent backend
 
-- real repository scanning logic
-- project graph construction
-- concept and usage analysis
-- developer profile modeling
-- recommendation and explanation engines
-- learning progress and goal tracking
+## Future vision
 
-## Roadmap summary
-
-The project is currently moving from foundation to product-oriented capabilities. The immediate focus is on building a reliable scanner and the project graph layer that will support later learning features.
+The scanner is only the first component of TMTP. Over time, the project will transform raw repository analysis into a concept-aware understanding of a software project, and AI will be used only after deterministic analysis has established a reliable foundation.

@@ -3,7 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@tmpt/scanner": "workspace:*"
+  },
   "exports": {
     ".": "./src/index.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.1",
+    "typescript": "^5.9.3"
   }
 }
