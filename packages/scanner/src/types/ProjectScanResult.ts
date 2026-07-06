@@ -5,6 +5,7 @@ import type { DetectedLanguage } from './DetectedLanguage.js';
 import type { DetectedFramework } from './DetectedFramework.js';
 import type { DetectedInfrastructure } from './DetectedInfrastructure.js';
 import type { DetectedDependency } from './DetectedDependency.js';
+import type { StartingFileCandidate } from './StartingFileCandidate.js';
 
 export interface ProjectScanResult {
   files: ProjectFile[];
@@ -14,4 +15,5 @@ export interface ProjectScanResult {
   frameworks: DetectedFramework[];
   infrastructure: DetectedInfrastructure[];
   dependencies: DetectedDependency[];
+  startingFiles: StartingFileCandidate[];
 }

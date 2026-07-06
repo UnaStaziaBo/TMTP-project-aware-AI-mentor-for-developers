@@ -10,6 +10,9 @@ importers:
 
   apps/vscode-extension:
     dependencies:
+      '@tmpt/ai':
+        specifier: workspace:*
+        version: link:../../packages/ai
       '@tmpt/scanner':
         specifier: workspace:*
         version: link:../../packages/scanner
@@ -75,6 +78,21 @@ importers:
       vite:
         specifier: ^5.4.10
         version: 5.4.21(@types/node@26.0.1)
+
+  packages/ai:
+    devDependencies:
+      '@tmpt/scanner':
+        specifier: workspace:*
+        version: link:../scanner
+      '@types/node':
+        specifier: ^26.0.1
+        version: 26.0.1
+      tsx:
+        specifier: ^4.22.4
+        version: 4.22.4
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
 
   packages/scanner:
     devDependencies:

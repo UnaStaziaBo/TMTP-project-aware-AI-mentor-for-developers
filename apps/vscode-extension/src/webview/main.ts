@@ -1,10 +1,30 @@
 import type { ProjectScanResult } from '@tmpt/scanner';
+import type { GuidedTour } from '@tmpt/ai';
 import { STAGES, type ExtensionMessage, type StageKey } from '../protocol.js';
 
 declare function acquireVsCodeApi(): { postMessage(message: unknown): void };
 
 const vscodeApi = acquireVsCodeApi();
 const root = document.getElementById('root')!;
+
+type Tab = 'overview' | 'startingFiles' | 'guidedTour';
+
+interface AIState {
+  configured: boolean;
+  provider?: string;
+  model?: string;
+  editingConfig: boolean;
+  apiKeyDraft: string;
+  modelDraft: string;
+  testStatus: 'idle' | 'testing' | 'success' | 'failure';
+  testMessage?: string;
+  generationStatus: 'idle' | 'generating' | 'done' | 'error';
+  tour?: GuidedTour;
+  /** -1 = welcome screen, 0..stops.length-1 = a stop, stops.length = finished. */
+  currentStopIndex: number;
+  cached: boolean;
+  errorMessage?: string;
+}
 
 interface State {
   status: 'scanning' | 'done' | 'no-workspace' | 'error';
@@ -14,6 +34,8 @@ interface State {
   stageElapsed: Partial<Record<StageKey, number>>;
   totalElapsedMs: number | null;
   errorMessage: string | null;
+  activeTab: Tab;
+  ai: AIState;
 }
 
 const emptyResult: ProjectScanResult = {
@@ -24,6 +46,7 @@ const emptyResult: ProjectScanResult = {
   frameworks: [],
   infrastructure: [],
   dependencies: [],
+  startingFiles: [],
 };
 
 const state: State = {
@@ -34,6 +57,17 @@ const state: State = {
   stageElapsed: {},
   totalElapsedMs: null,
   errorMessage: null,
+  activeTab: 'overview',
+  ai: {
+    configured: false,
+    editingConfig: true,
+    apiKeyDraft: '',
+    modelDraft: 'gpt-5.5',
+    testStatus: 'idle',
+    generationStatus: 'idle',
+    currentStopIndex: -1,
+    cached: false,
+  },
 };
 
 function escapeHtml(value: string): string {
@@ -59,6 +93,8 @@ function stageSummary(key: StageKey, result: ProjectScanResult): string {
       return `${result.infrastructure.length} item${result.infrastructure.length === 1 ? '' : 's'}`;
     case 'dependency':
       return `${result.dependencies.length} dependenc${result.dependencies.length === 1 ? 'y' : 'ies'}`;
+    case 'startingFiles':
+      return `${result.startingFiles.length} candidate${result.startingFiles.length === 1 ? '' : 's'}`;
   }
 }
 
@@ -164,6 +200,251 @@ function renderFileTypes(): string {
     </div>`;
 }
 
+const TABS: Array<[Tab, string]> = [
+  ['overview', 'Project Overview'],
+  ['startingFiles', '🚀 Where Should You Start?'],
+  ['guidedTour', '✨ Guided Tour'],
+];
+
+function renderTabBar(): string {
+  return `<div class="tab-bar">${TABS.map(
+    ([key, label]) =>
+      `<button class="tab-button ${state.activeTab === key ? 'active' : ''}" data-tab="${key}">${label}</button>`,
+  ).join('')}</div>`;
+}
+
+function circledNumber(n: number): string {
+  if (n >= 1 && n <= 20) return String.fromCodePoint(0x2460 + (n - 1));
+  return `${n}.`;
+}
+
+function renderOverviewBody(): string {
+  const r = state.result;
+  return `
+    ${renderStatTiles()}
+    ${renderBarSection('languages', 'Languages', r.languages)}
+    ${renderBarSection('frameworks', 'Frameworks', r.frameworks)}
+    ${renderBarSection('infrastructure', 'Infrastructure', r.infrastructure)}
+    ${renderBarSection('dependencies', 'Dependencies', r.dependencies)}
+    ${renderFileTypes()}
+  `;
+}
+
+function renderStartingFilesScreen(): string {
+  const candidates = state.result.startingFiles;
+
+  if (candidates.length === 0) {
+    const stillScanning = state.status === 'scanning' && !state.completed.has('startingFiles');
+    return `
+      <div class="screen-heading">
+        <h2>🚀 Where Should You Start?</h2>
+        <p>Recommended Starting Files</p>
+      </div>
+      <div class="empty-line">${
+        stillScanning ? 'Scanning for the best files to start with…' : 'No clear starting point detected yet.'
+      }</div>`;
+  }
+
+  return `
+    <div class="screen-heading">
+      <h2>🚀 Where Should You Start?</h2>
+      <p>Recommended Starting Files</p>
+    </div>
+    <p class="starting-files-intro">If you have never seen this project before, start here.</p>
+    <div class="starting-files">
+      ${candidates
+        .map((candidate, i) => {
+          const percent = Math.round(candidate.confidence * 100);
+          return `
+        <div class="starting-file-card" style="animation-delay:${i * 45}ms">
+          <div class="starting-file-rank">${circledNumber(i + 1)}</div>
+          <div class="starting-file-body">
+            <div class="starting-file-path">${escapeHtml(candidate.file)}</div>
+            <div class="starting-file-confidence-row">
+              <span class="starting-file-confidence-label">Confidence</span>
+              <span class="bar-track"><span class="bar-fill" data-target="${percent}"></span></span>
+              <span class="percent">${percent}%</span>
+            </div>
+            <div class="starting-file-why">
+              <span class="why-label">Why?</span>
+              <ul>${candidate.reasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join('')}</ul>
+            </div>
+          </div>
+        </div>`;
+        })
+        .join('')}
+    </div>`;
+}
+
+function renderAISettingsForm(): string {
+  const ai = state.ai;
+  const statusText =
+    ai.testStatus === 'success'
+      ? '✓ Connection successful'
+      : ai.testStatus === 'failure'
+        ? `✗ ${ai.testMessage ?? 'Connection failed'}`
+        : ai.testStatus === 'testing'
+          ? 'Testing…'
+          : '';
+
+  return `
+    <div class="screen-heading">
+      <h2>✨ Guided Project Tour</h2>
+      <p>Configure an AI provider</p>
+    </div>
+    <div class="ai-settings-form">
+      <div class="ai-field-label">AI Provider</div>
+      <label class="ai-radio-row"><input type="radio" checked disabled /> OpenAI</label>
+
+      <label class="ai-field-label" for="ai-api-key">API Key</label>
+      <input class="ai-text-input" id="ai-api-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-..." value="${escapeHtml(ai.apiKeyDraft)}" />
+
+      <label class="ai-field-label" for="ai-model">Model</label>
+      <input class="ai-text-input" id="ai-model" type="text" autocomplete="off" spellcheck="false" value="${escapeHtml(ai.modelDraft)}" />
+
+      <div class="ai-form-actions">
+        <button class="rescan-button" id="ai-test">Test Connection</button>
+        <button class="retry-button" id="ai-save">Save</button>
+        ${ai.configured ? `<button class="ai-link-button" id="ai-cancel-edit">Cancel</button>` : ''}
+      </div>
+      ${statusText ? `<div class="ai-test-message ${ai.testStatus}">${escapeHtml(statusText)}</div>` : ''}
+    </div>
+    <p class="ai-privacy-note">Your API key is stored only in VS Code's Secret Storage. It is never written to settings.json and never sent back to this webview.</p>`;
+}
+
+function renderTourStop(tour: GuidedTour, index: number): string {
+  const stop = tour.stops[index]!;
+  const isLast = index === tour.stops.length - 1;
+
+  return `
+    <div class="tour-progress">Stop ${index + 1} of ${tour.stops.length}</div>
+    <div class="ai-briefing">
+      <div class="ai-briefing-divider"></div>
+      <div class="ai-briefing-block">
+        <div class="tour-stop-marker">📍 Stop ${index + 1}</div>
+        <div class="ai-briefing-label">${escapeHtml(stop.title)}</div>
+        <div class="ai-briefing-file">${escapeHtml(stop.file)}</div>
+      </div>
+      <div class="ai-briefing-divider"></div>
+      <div class="ai-briefing-block">
+        <div class="tour-section-label">Why are we here?</div>
+        <p class="ai-briefing-text">${escapeHtml(stop.whyThisFile)}</p>
+      </div>
+      <div class="ai-briefing-divider"></div>
+      <div class="ai-briefing-block">
+        <div class="tour-section-label">Things to notice</div>
+        <div class="starting-file-why"><ul>${stop.whatToNotice.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul></div>
+      </div>
+      <div class="ai-briefing-divider"></div>
+      ${
+        !isLast && stop.nextReason
+          ? `<div class="tour-next-hint">→ Up next: ${escapeHtml(stop.nextReason)}</div>`
+          : ''
+      }
+    </div>
+    <div class="tour-nav">
+      <button class="ai-link-button" id="ai-tour-previous">← Previous</button>
+      <button class="rescan-button" id="ai-tour-open-file">Open File</button>
+      <button class="ai-explain-button" id="ai-tour-continue">Continue →</button>
+    </div>`;
+}
+
+function renderTourWelcome(tour: GuidedTour): string {
+  if (tour.stops.length === 0) {
+    return `
+      <p class="ai-intro-copy">${escapeHtml(tour.introduction)}</p>
+      <div class="empty-line">No valid starting files were available to build a tour from.</div>
+      <div class="ai-actions">
+        <button class="ai-link-button" id="ai-regenerate">↻ Regenerate</button>
+        <button class="ai-link-button" id="ai-edit-config">⚙ Change API Key</button>
+      </div>`;
+  }
+
+  return `
+    <p class="ai-intro-copy tour-welcome-text">${escapeHtml(tour.introduction)}</p>
+    <div class="ai-actions">
+      <button class="ai-explain-button" id="ai-tour-begin">Let's begin →</button>
+    </div>`;
+}
+
+function renderTourFinished(): string {
+  return `
+    <div class="ai-briefing">
+      <div class="ai-briefing-divider"></div>
+      <div class="ai-briefing-block">
+        <p class="ai-briefing-text">Great!</p>
+        <p class="ai-briefing-text">You now understand the structure of this project.</p>
+        <p class="ai-briefing-text">Next we'll start learning the programming language by using the code you've just explored.</p>
+      </div>
+      <div class="ai-briefing-divider"></div>
+    </div>
+    <div class="ai-actions">
+      <div>
+        <button class="tour-placeholder-button" disabled>Begin Learning →</button>
+        <div class="tour-placeholder-caption">Coming in a future milestone</div>
+      </div>
+      <button class="ai-link-button" id="ai-tour-previous">← Previous</button>
+      <button class="ai-link-button" id="ai-regenerate">↻ Regenerate</button>
+    </div>`;
+}
+
+function renderGuidedTour(): string {
+  const ai = state.ai;
+  const subtitle =
+    ai.tour && ai.currentStopIndex >= 0 && ai.currentStopIndex < ai.tour.stops.length
+      ? `Stop ${ai.currentStopIndex + 1} of ${ai.tour.stops.length}`
+      : ai.configured && ai.provider && ai.model
+        ? `Configured — ${ai.provider} / ${ai.model}`
+        : '';
+  const heading = `
+    <div class="screen-heading">
+      <h2>✨ Guided Project Tour</h2>
+      <p>${escapeHtml(subtitle)}</p>
+    </div>`;
+
+  if (ai.generationStatus === 'generating') {
+    return `${heading}<div class="empty-line">Generating your guided tour…</div>`;
+  }
+
+  if (ai.generationStatus === 'error') {
+    return `
+      ${heading}
+      <div class="empty-line">${escapeHtml(ai.errorMessage ?? 'Generation failed.')}</div>
+      <div class="ai-actions">
+        <button class="ai-explain-button" id="ai-generate">✨ Try Again</button>
+        <button class="ai-link-button" id="ai-edit-config">⚙ Change API Key</button>
+      </div>`;
+  }
+
+  if (ai.generationStatus === 'done' && ai.tour) {
+    const tour = ai.tour;
+    let body: string;
+    if (ai.currentStopIndex < 0) {
+      body = renderTourWelcome(tour);
+    } else if (ai.currentStopIndex >= tour.stops.length) {
+      body = renderTourFinished();
+    } else {
+      body = renderTourStop(tour, ai.currentStopIndex);
+    }
+    return `${heading}${body}`;
+  }
+
+  return `
+    ${heading}
+    <p class="ai-intro-copy">Take a guided walkthrough of this repository, grounded entirely in what the deterministic scan already found — no re-analysis, no invented files.</p>
+    <div class="ai-actions">
+      <button class="ai-explain-button" id="ai-generate">✨ Take the Tour</button>
+      <button class="ai-link-button" id="ai-edit-config">⚙ Change API Key</button>
+    </div>`;
+}
+
+function renderGuidedTourScreen(): string {
+  if (state.ai.editingConfig || !state.ai.configured) {
+    return renderAISettingsForm();
+  }
+  return renderGuidedTour();
+}
+
 function renderHeader(): string {
   const durationLabel =
     state.totalElapsedMs != null ? `Scanned in ${Math.round(state.totalElapsedMs)}ms` : 'Scanning…';
@@ -205,20 +486,88 @@ function render(): void {
     return;
   }
 
-  const r = state.result;
+  const screen =
+    state.activeTab === 'overview'
+      ? renderOverviewBody()
+      : state.activeTab === 'startingFiles'
+        ? renderStartingFilesScreen()
+        : renderGuidedTourScreen();
+
   root.innerHTML = `
     ${renderHeader()}
     ${renderPipeline()}
-    ${renderStatTiles()}
-    ${renderBarSection('languages', 'Languages', r.languages)}
-    ${renderBarSection('frameworks', 'Frameworks', r.frameworks)}
-    ${renderBarSection('infrastructure', 'Infrastructure', r.infrastructure)}
-    ${renderBarSection('dependencies', 'Dependencies', r.dependencies)}
-    ${renderFileTypes()}
+    ${renderTabBar()}
+    ${screen}
   `;
 
   document.getElementById('rescan')?.addEventListener('click', () => {
     vscodeApi.postMessage({ type: 'rescan' });
+  });
+
+  document.querySelectorAll<HTMLElement>('.tab-button').forEach((button) => {
+    button.addEventListener('click', () => {
+      const tab = button.dataset.tab;
+      state.activeTab = tab === 'startingFiles' || tab === 'guidedTour' ? tab : 'overview';
+      render();
+    });
+  });
+
+  document.getElementById('ai-api-key')?.addEventListener('input', (event) => {
+    state.ai.apiKeyDraft = (event.target as HTMLInputElement).value;
+  });
+  document.getElementById('ai-model')?.addEventListener('input', (event) => {
+    state.ai.modelDraft = (event.target as HTMLInputElement).value;
+  });
+  document.getElementById('ai-test')?.addEventListener('click', () => {
+    if (!state.ai.apiKeyDraft) return;
+    state.ai.testStatus = 'testing';
+    render();
+    vscodeApi.postMessage({
+      type: 'aiTestConnection',
+      apiKey: state.ai.apiKeyDraft,
+      model: state.ai.modelDraft || 'gpt-5.5',
+    });
+  });
+  document.getElementById('ai-save')?.addEventListener('click', () => {
+    if (!state.ai.apiKeyDraft) return;
+    vscodeApi.postMessage({
+      type: 'aiSaveConfig',
+      apiKey: state.ai.apiKeyDraft,
+      model: state.ai.modelDraft || 'gpt-5.5',
+    });
+    state.ai.apiKeyDraft = '';
+  });
+  document.getElementById('ai-cancel-edit')?.addEventListener('click', () => {
+    state.ai.editingConfig = false;
+    render();
+  });
+  document.getElementById('ai-edit-config')?.addEventListener('click', () => {
+    state.ai.editingConfig = true;
+    render();
+  });
+  document.getElementById('ai-generate')?.addEventListener('click', () => {
+    vscodeApi.postMessage({ type: 'aiGenerate' });
+  });
+  document.getElementById('ai-regenerate')?.addEventListener('click', () => {
+    vscodeApi.postMessage({ type: 'aiRegenerate' });
+  });
+  document.getElementById('ai-tour-begin')?.addEventListener('click', () => {
+    state.ai.currentStopIndex = 0;
+    render();
+  });
+  document.getElementById('ai-tour-previous')?.addEventListener('click', () => {
+    state.ai.currentStopIndex = Math.max(-1, state.ai.currentStopIndex - 1);
+    render();
+  });
+  document.getElementById('ai-tour-continue')?.addEventListener('click', () => {
+    state.ai.currentStopIndex += 1;
+    render();
+  });
+  document.getElementById('ai-tour-open-file')?.addEventListener('click', () => {
+    const stop = state.ai.tour?.stops[state.ai.currentStopIndex];
+    if (stop) {
+      vscodeApi.postMessage({ type: 'openFile', file: stop.file });
+    }
   });
 
   requestAnimationFrame(() => {
@@ -256,6 +605,32 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
     case 'scanError':
       state.status = 'error';
       state.errorMessage = message.message;
+      break;
+    case 'aiConfigStatus':
+      state.ai.configured = message.configured;
+      state.ai.provider = message.provider;
+      state.ai.model = message.model;
+      state.ai.editingConfig = !message.configured;
+      if (message.model) {
+        state.ai.modelDraft = message.model;
+      }
+      break;
+    case 'aiTestResult':
+      state.ai.testStatus = message.result.ok ? 'success' : 'failure';
+      state.ai.testMessage = message.result.ok ? undefined : message.result.message;
+      break;
+    case 'aiGenerating':
+      state.ai.generationStatus = 'generating';
+      break;
+    case 'aiResult':
+      state.ai.generationStatus = 'done';
+      state.ai.tour = message.tour;
+      state.ai.cached = message.cached;
+      state.ai.currentStopIndex = -1;
+      break;
+    case 'aiError':
+      state.ai.generationStatus = 'error';
+      state.ai.errorMessage = message.message;
       break;
   }
 

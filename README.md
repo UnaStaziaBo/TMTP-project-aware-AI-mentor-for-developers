@@ -4,7 +4,7 @@ Teach Me This Project (TMTP) is a project-aware AI mentor for software developer
 
 Unlike traditional coding assistants that begin from a prompt, TMTP first understands the software project itself. It analyzes the repository structure, technologies, conventions, and dependencies before offering guidance, so learning support is grounded in the actual codebase.
 
-TMTP is an early open-source project with a completed first milestone: a deterministic project analysis pipeline that can inspect repositories and produce a structured understanding of them.
+TMTP is an early open-source project with three completed milestones: a deterministic project analysis pipeline, a starting-file discovery engine that ranks which files a developer should read first, and — the first AI-powered feature — a Guided Project Tour that walks a developer through those files one at a time, grounded entirely in that deterministic analysis.
 
 ## Why TMTP exists
 
@@ -18,9 +18,9 @@ The long-term vision is to build:
 - personalized learning recommendations
 - explainable guidance grounded in the repository
 
-## Current milestone: Project Analysis Pipeline v0.1
+## Current milestones
 
-The first milestone is complete.
+### Milestone 1: Project Analysis Pipeline v0.1
 
 ### Implemented stages
 
@@ -62,6 +62,46 @@ The first milestone is complete.
   - Django REST Framework
   - Spring Security
 
+### Milestone 2: Starting File Discovery Engine
+
+Answers a single question before any AI is involved: *if a developer has never seen
+this project before, which file(s) should they open first?* Many projects have no
+single entry point (frontend + backend, CLI + API, training + inference, a library
+with examples), so the stage produces a ranked list rather than assuming one.
+
+- ✅ Starting File Discovery
+  - deterministic, rule-based scoring (executable entry, framework bootstrap,
+    conventional filenames, import centrality, reverse-reference counts,
+    orchestration size, small-file penalties)
+  - every score is explainable via a plain-language `reasons` list
+  - confidence normalized to 0.0–1.0
+  - never collapses multiple valid starting points into one
+
+### Milestone 3: AI Guided Project Tour
+
+The first AI-powered feature — a single, one-shot generation, not a chat. Instead of
+answering "what technologies are in this project?", it answers "come with me, I'll
+show you this project": a senior-developer-style walkthrough, one file at a time, in
+the order the deterministic Starting File Discovery engine already ranked them. The
+scanner itself is untouched by this milestone.
+
+- ✅ AI Guided Project Tour (`packages/ai`)
+  - provider abstraction (`AIProvider`) with an OpenAI implementation — designed
+    so a second provider is a new implementation, not a call-site change
+  - API key stored only in VS Code SecretStorage, never in settings.json, never
+    sent to the webview — the webview only ever learns whether a provider is configured
+  - structured JSON response (`GuidedTour`: an introduction plus an ordered list of
+    `TourStop`s), shape-validated on the way in
+  - "never invent files, never reorder the ranking": any stop referencing a file
+    outside the deterministic `startingFiles` list is silently dropped, and the
+    surviving stops are re-sorted to match the scanner's own ranking regardless of
+    what order the model produced
+  - one stop shown at a time, with a "Stop N of M" stepper and an **Open File**
+    button that opens that exact file in the editor — no manual searching
+  - idempotent: cached until the user explicitly regenerates
+  - ends with a placeholder "Begin Learning →" step for the next milestone — inert,
+    not wired to anything yet
+
 ## Architecture
 
 TMTP uses a deterministic pipeline architecture. Each stage enriches the same project analysis result object.
@@ -79,6 +119,8 @@ Infrastructure Stage
 ↓
 Dependency Stage
 ↓
+Starting File Stage
+↓
 ProjectScanResult
 ```
 
@@ -88,7 +130,9 @@ This design keeps the analysis reusable, IDE-independent, and easy to extend. Th
 
 - apps/: user-facing applications such as the VS Code extension
 - packages/: reusable core packages
-  - scanner/: the project analysis engine
+  - scanner/: the deterministic project analysis engine (no AI dependency)
+  - ai/: the AI provider abstraction, prompt, and response validation — depends
+    on scanner's types only, never the reverse
   - shared/: shared contracts and utilities
 - examples/: minimal real-world golden projects used as long-term integration fixtures
 - docs/: architecture, development, and roadmap documentation
@@ -107,11 +151,14 @@ Current projects include:
 
 ## Testing
 
-The scanner currently includes integration tests for each golden project.
+The scanner includes integration tests for each golden project; the ai package
+has unit tests for the deterministic context builder, response validation, and
+the OpenAI provider (against a mocked network layer — no real API key needed).
 
 Current status:
 
-- 105 integration tests
+- 123 scanner integration tests
+- 18 ai package tests
 - 0 failures
 
 ## Running the project
@@ -120,6 +167,7 @@ Current status:
 pnpm install
 pnpm build
 pnpm --filter @tmpt/scanner test:integration
+pnpm --filter @tmpt/ai test:integration
 ```
 
 ## Roadmap
@@ -133,6 +181,8 @@ pnpm --filter @tmpt/scanner test:integration
   - Frameworks
   - Infrastructure
   - Dependencies
+- ✅ Starting File Discovery Engine (Milestone 2, deterministic — ships ahead of the Project Graph below)
+- ✅ AI Guided Project Tour (Milestone 3 — first AI feature; one-shot, no chat, no lessons)
 
 ### Upcoming
 

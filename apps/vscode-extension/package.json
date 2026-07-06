@@ -23,7 +23,8 @@
     "check": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@tmpt/scanner": "workspace:*"
+    "@tmpt/scanner": "workspace:*",
+    "@tmpt/ai": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^26.0.1",

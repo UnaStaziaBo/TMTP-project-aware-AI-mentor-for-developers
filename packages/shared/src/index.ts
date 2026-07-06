@@ -13,5 +13,6 @@ export async function scanProject(
     frameworks: [],
     infrastructure: [],
     dependencies: [],
+    startingFiles: [],
   };
 }
