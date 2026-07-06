@@ -1,5 +1,34 @@
 {
   "name": "@tmpt/vscode-extension",
+  "displayName": "TMTP",
+  "description": "Project-aware onboarding: visualizes what TMTP's deterministic scanner discovers about your codebase.",
   "version": "0.1.0",
-  "private": true
+  "private": true,
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "main": "./dist/extension.js",
+  "activationEvents": ["onStartupFinished"],
+  "contributes": {
+    "commands": [
+      {
+        "command": "tmtp.showOverview",
+        "title": "TMTP: Show Project Overview"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "node ./scripts/build.mjs",
+    "check": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@tmpt/scanner": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.1",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "0.21.5",
+    "typescript": "^5.6.3"
+  }
 }

@@ -1,0 +1,13 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "tmtp: build extension",
+      "type": "shell",
+      "command": "pnpm",
+      "args": ["--filter", "@tmpt/vscode-extension", "run", "build"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    }
+  ]
+}
