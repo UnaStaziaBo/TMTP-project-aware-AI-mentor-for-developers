@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import path from 'node:path';
+import { promises as fs } from 'node:fs';
 import {
   FilesystemStage,
   LanguageStage,
@@ -10,15 +11,16 @@ import {
   type PipelineStage,
   type ProjectScanResult,
 } from '@tmpt/scanner';
-import { buildAIContext, groundTourStops, OpenAIProvider, type GuidedTour } from '@tmpt/ai';
+import { OpenAIProvider, type FileLesson } from '@tmpt/ai';
 import { getAIConfig, saveAIConfig } from './ai/aiConfig.js';
+import { determinePrimaryLanguage } from './languageProfile.js';
 import { STAGES, type ExtensionMessage, type StageKey, type WebviewMessage } from './protocol.js';
 
-const GUIDED_TOUR_CACHE_KEY = 'tmtp.ai.lastGuidedTour';
+const FILE_LESSON_CACHE_KEY = 'tmtp.ai.fileLessons';
 
 let panel: vscode.WebviewPanel | undefined;
 let latestResult: ProjectScanResult | undefined;
-let cachedTour: GuidedTour | undefined;
+let fileLessonCache = new Map<string, FileLesson>();
 
 function makeStage(key: StageKey, projectPath: string): PipelineStage {
   switch (key) {
@@ -76,48 +78,7 @@ async function postAIConfigStatus(
   });
 }
 
-async function generateTour(
-  context: vscode.ExtensionContext,
-  post: (message: ExtensionMessage) => void,
-  force: boolean,
-): Promise<void> {
-  if (!latestResult) {
-    post({ type: 'aiError', message: 'Run a scan before generating a tour.' });
-    return;
-  }
-
-  if (!force && cachedTour) {
-    post({ type: 'aiResult', tour: cachedTour, cached: true });
-    return;
-  }
-
-  const stored = await getAIConfig(context);
-  if (!stored) {
-    post({ type: 'aiError', message: 'Configure an AI provider first.' });
-    return;
-  }
-
-  post({ type: 'aiGenerating' });
-
-  try {
-    const projectName = vscode.workspace.workspaceFolders?.[0]?.name ?? 'this project';
-    const aiContext = buildAIContext(projectName, latestResult);
-    const provider = new OpenAIProvider();
-    const raw = await provider.generateGuidedTour(aiContext, {
-      apiKey: stored.apiKey,
-      model: stored.config.model,
-    });
-    const tour = groundTourStops(raw, aiContext.startingFiles);
-
-    cachedTour = tour;
-    await context.workspaceState.update(GUIDED_TOUR_CACHE_KEY, tour);
-    post({ type: 'aiResult', tour, cached: false });
-  } catch (error) {
-    post({ type: 'aiError', message: error instanceof Error ? error.message : String(error) });
-  }
-}
-
-async function openTourFile(file: string, post: (message: ExtensionMessage) => void): Promise<void> {
+async function openFile(file: string, post: (message: ExtensionMessage) => void): Promise<void> {
   const folder = vscode.workspace.workspaceFolders?.[0];
   if (!folder) {
     post({ type: 'aiError', message: 'No workspace folder is open.' });
@@ -130,6 +91,54 @@ async function openTourFile(file: string, post: (message: ExtensionMessage) => v
     await vscode.window.showTextDocument(document, { viewColumn: vscode.ViewColumn.Beside, preview: true });
   } catch (error) {
     post({ type: 'aiError', message: error instanceof Error ? error.message : String(error) });
+  }
+}
+
+async function handleExplainFile(
+  context: vscode.ExtensionContext,
+  file: string,
+  post: (message: ExtensionMessage) => void,
+): Promise<void> {
+  const folder = vscode.workspace.workspaceFolders?.[0];
+  if (!folder || !latestResult) {
+    post({ type: 'fileLessonError', file, message: 'Run a scan before requesting a lesson.' });
+    return;
+  }
+
+  const cached = fileLessonCache.get(file);
+  if (cached) {
+    post({ type: 'fileLessonResult', file, lesson: cached, cached: true });
+    return;
+  }
+
+  const language = determinePrimaryLanguage(latestResult.languages);
+  if (!language) {
+    post({ type: 'fileLessonError', file, message: 'No supported primary language was detected for this project.' });
+    return;
+  }
+
+  const stored = await getAIConfig(context);
+  if (!stored) {
+    post({ type: 'fileLessonError', file, message: 'Configure an AI provider first.' });
+    return;
+  }
+
+  post({ type: 'fileLessonGenerating', file });
+
+  try {
+    const fileContent = await fs.readFile(path.join(folder.uri.fsPath, file), 'utf8');
+    const reasons = latestResult.startingFiles.find((candidate) => candidate.file === file)?.reasons ?? [];
+    const provider = new OpenAIProvider();
+    const lesson = await provider.generateFileLesson(
+      { language, file, fileContent, reasons },
+      { apiKey: stored.apiKey, model: stored.config.model },
+    );
+
+    fileLessonCache.set(file, lesson);
+    await context.workspaceState.update(FILE_LESSON_CACHE_KEY, Object.fromEntries(fileLessonCache));
+    post({ type: 'fileLessonResult', file, lesson, cached: false });
+  } catch (error) {
+    post({ type: 'fileLessonError', file, message: error instanceof Error ? error.message : String(error) });
   }
 }
 
@@ -198,14 +207,11 @@ function openOverviewPanel(context: vscode.ExtensionContext): void {
           postAIConfigStatus(context, post),
         );
         break;
-      case 'aiGenerate':
-        void generateTour(context, post, false);
-        break;
-      case 'aiRegenerate':
-        void generateTour(context, post, true);
-        break;
       case 'openFile':
-        void openTourFile(message.file, post);
+        void openFile(message.file, post);
+        break;
+      case 'explainFile':
+        void handleExplainFile(context, message.file, post);
         break;
     }
   });
@@ -216,7 +222,8 @@ function openOverviewPanel(context: vscode.ExtensionContext): void {
 }
 
 export function activate(context: vscode.ExtensionContext): void {
-  cachedTour = context.workspaceState.get<GuidedTour>(GUIDED_TOUR_CACHE_KEY);
+  const storedLessons = context.workspaceState.get<Record<string, FileLesson>>(FILE_LESSON_CACHE_KEY);
+  fileLessonCache = new Map(Object.entries(storedLessons ?? {}));
 
   context.subscriptions.push(
     vscode.commands.registerCommand('tmtp.showOverview', () => openOverviewPanel(context)),

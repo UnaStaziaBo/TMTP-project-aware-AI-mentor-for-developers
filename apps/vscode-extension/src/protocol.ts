@@ -1,5 +1,5 @@
 import type { ProjectScanResult } from '@tmpt/scanner';
-import type { GuidedTour, TestConnectionResult } from '@tmpt/ai';
+import type { FileLesson, TestConnectionResult } from '@tmpt/ai';
 
 export type StageKey =
   | 'filesystem'
@@ -31,15 +31,15 @@ export type ExtensionMessage =
   | { type: 'noWorkspace' }
   | { type: 'aiConfigStatus'; configured: boolean; provider?: string; model?: string }
   | { type: 'aiTestResult'; result: TestConnectionResult }
-  | { type: 'aiGenerating' }
-  | { type: 'aiResult'; tour: GuidedTour; cached: boolean }
-  | { type: 'aiError'; message: string };
+  | { type: 'aiError'; message: string }
+  | { type: 'fileLessonGenerating'; file: string }
+  | { type: 'fileLessonResult'; file: string; lesson: FileLesson; cached: boolean }
+  | { type: 'fileLessonError'; file: string; message: string };
 
 export type WebviewMessage =
   | { type: 'rescan' }
   | { type: 'ready' }
   | { type: 'aiTestConnection'; apiKey: string; model: string }
   | { type: 'aiSaveConfig'; apiKey: string; model: string }
-  | { type: 'aiGenerate' }
-  | { type: 'aiRegenerate' }
-  | { type: 'openFile'; file: string };
+  | { type: 'openFile'; file: string }
+  | { type: 'explainFile'; file: string };

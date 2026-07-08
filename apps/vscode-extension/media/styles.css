@@ -474,6 +474,27 @@ body {
   background: var(--vscode-button-hoverBackground);
 }
 
+.ai-explain-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ai-explain-button:disabled:hover {
+  background: var(--vscode-button-background);
+}
+
+.lesson-snippet {
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 13.5px;
+  background: var(--vscode-textCodeBlock-background, var(--vscode-editorWidget-background));
+  border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
+  border-radius: 4px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
 .ai-cached-badge {
   font-size: 11px;
   color: var(--vscode-descriptionForeground);
@@ -525,12 +546,6 @@ body {
   margin-bottom: 4px;
 }
 
-.tour-stop-marker {
-  font-size: 13px;
-  color: var(--vscode-descriptionForeground);
-  margin-bottom: 6px;
-}
-
 .tour-section-label {
   font-size: 12px;
   font-weight: 600;
@@ -538,20 +553,6 @@ body {
   letter-spacing: 0.4px;
   color: var(--vscode-descriptionForeground);
   margin-bottom: 10px;
-}
-
-.tour-next-hint {
-  padding: 16px 4px;
-  font-size: 13px;
-  font-style: italic;
-  color: var(--vscode-descriptionForeground);
-}
-
-.tour-welcome-text {
-  font-size: 15px;
-  line-height: 1.8;
-  white-space: pre-line;
-  max-width: 560px;
 }
 
 .tour-nav {
@@ -579,6 +580,40 @@ body {
   margin-top: 6px;
   text-align: center;
 }
+
+.starting-file-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.construct-block {
+  margin-bottom: 22px;
+}
+
+.construct-block:last-child {
+  margin-bottom: 0;
+}
+
+.construct-lens-row {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 10px;
+  margin-bottom: 8px;
+  align-items: baseline;
+}
+
+.construct-lens-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.construct-lens-label.project { color: var(--vscode-charts-blue); }
+.construct-lens-label.language { color: var(--vscode-charts-purple); }
+.construct-lens-label.architecture { color: var(--vscode-charts-orange); }
 
 /* ---- Sections ---- */
 

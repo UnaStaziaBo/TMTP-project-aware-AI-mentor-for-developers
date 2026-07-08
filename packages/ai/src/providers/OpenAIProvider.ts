@@ -1,7 +1,7 @@
-import { SYSTEM_PROMPT, buildUserPrompt } from '../prompt.js';
-import { parseGuidedTour } from '../validateGuidedTour.js';
-import type { AIContext } from '../types/AIContext.js';
-import type { GuidedTour } from '../types/GuidedTour.js';
+import { FILE_LESSON_SYSTEM_PROMPT, buildFileLessonUserPrompt } from '../prompts/fileLessonPrompt.js';
+import { parseFileLesson } from '../validateFileLesson.js';
+import type { FileLesson } from '../types/FileLesson.js';
+import type { FileLessonContext } from '../types/FileLessonContext.js';
 import type { AIProvider, AIProviderCredentials, TestConnectionResult } from './AIProvider.js';
 
 const OPENAI_BASE_URL = 'https://api.openai.com/v1';
@@ -31,10 +31,11 @@ export class OpenAIProvider implements AIProvider {
     }
   }
 
-  async generateGuidedTour(
-    context: AIContext,
+  private async requestJSON(
+    systemPrompt: string,
+    userPrompt: string,
     credentials: AIProviderCredentials,
-  ): Promise<GuidedTour> {
+  ): Promise<unknown> {
     const response = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -45,8 +46,8 @@ export class OpenAIProvider implements AIProvider {
         model: credentials.model,
         response_format: { type: 'json_object' },
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: buildUserPrompt(context) },
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
         ],
       }),
     });
@@ -62,13 +63,15 @@ export class OpenAIProvider implements AIProvider {
       throw new Error('OpenAI response did not contain any message content');
     }
 
-    let raw: unknown;
     try {
-      raw = JSON.parse(content);
+      return JSON.parse(content);
     } catch {
       throw new Error('OpenAI response was not valid JSON');
     }
+  }
 
-    return parseGuidedTour(raw);
+  async generateFileLesson(context: FileLessonContext, credentials: AIProviderCredentials): Promise<FileLesson> {
+    const raw = await this.requestJSON(FILE_LESSON_SYSTEM_PROMPT, buildFileLessonUserPrompt(context), credentials);
+    return parseFileLesson(context.file, raw);
   }
 }

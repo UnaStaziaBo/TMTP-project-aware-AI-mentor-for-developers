@@ -1,5 +1,5 @@
 import type { ProjectScanResult } from '@tmpt/scanner';
-import type { GuidedTour } from '@tmpt/ai';
+import type { FileLesson } from '@tmpt/ai';
 import { STAGES, type ExtensionMessage, type StageKey } from '../protocol.js';
 
 declare function acquireVsCodeApi(): { postMessage(message: unknown): void };
@@ -9,7 +9,7 @@ const root = document.getElementById('root')!;
 
 type Tab = 'overview' | 'startingFiles' | 'guidedTour';
 
-interface AIState {
+interface AIConfigState {
   configured: boolean;
   provider?: string;
   model?: string;
@@ -18,11 +18,15 @@ interface AIState {
   modelDraft: string;
   testStatus: 'idle' | 'testing' | 'success' | 'failure';
   testMessage?: string;
-  generationStatus: 'idle' | 'generating' | 'done' | 'error';
-  tour?: GuidedTour;
-  /** -1 = welcome screen, 0..stops.length-1 = a stop, stops.length = finished. */
-  currentStopIndex: number;
-  cached: boolean;
+}
+
+interface GuidedTourState {
+  /** false = intro screen, true = stepping through a starting file. */
+  active: boolean;
+  /** Index into result.startingFiles. */
+  fileIndex: number;
+  status: 'idle' | 'generating' | 'done' | 'error';
+  lessons: Map<string, FileLesson>;
   errorMessage?: string;
 }
 
@@ -35,7 +39,8 @@ interface State {
   totalElapsedMs: number | null;
   errorMessage: string | null;
   activeTab: Tab;
-  ai: AIState;
+  aiConfig: AIConfigState;
+  tour: GuidedTourState;
 }
 
 const emptyResult: ProjectScanResult = {
@@ -58,15 +63,18 @@ const state: State = {
   totalElapsedMs: null,
   errorMessage: null,
   activeTab: 'overview',
-  ai: {
+  aiConfig: {
     configured: false,
     editingConfig: true,
     apiKeyDraft: '',
     modelDraft: 'gpt-5.5',
     testStatus: 'idle',
-    generationStatus: 'idle',
-    currentStopIndex: -1,
-    cached: false,
+  },
+  tour: {
+    active: false,
+    fileIndex: 0,
+    status: 'idle',
+    lessons: new Map(),
   },
 };
 
@@ -269,6 +277,10 @@ function renderStartingFilesScreen(): string {
               <span class="why-label">Why?</span>
               <ul>${candidate.reasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join('')}</ul>
             </div>
+            <div class="starting-file-actions">
+              <button class="rescan-button starting-file-open" data-index="${i}">Open File</button>
+              <button class="ai-explain-button starting-file-explain" data-index="${i}">Explain</button>
+            </div>
           </div>
         </div>`;
         })
@@ -277,7 +289,7 @@ function renderStartingFilesScreen(): string {
 }
 
 function renderAISettingsForm(): string {
-  const ai = state.ai;
+  const ai = state.aiConfig;
   const statusText =
     ai.testStatus === 'success'
       ? '✓ Connection successful'
@@ -312,137 +324,114 @@ function renderAISettingsForm(): string {
     <p class="ai-privacy-note">Your API key is stored only in VS Code's Secret Storage. It is never written to settings.json and never sent back to this webview.</p>`;
 }
 
-function renderTourStop(tour: GuidedTour, index: number): string {
-  const stop = tour.stops[index]!;
-  const isLast = index === tour.stops.length - 1;
-
-  return `
-    <div class="tour-progress">Stop ${index + 1} of ${tour.stops.length}</div>
-    <div class="ai-briefing">
-      <div class="ai-briefing-divider"></div>
-      <div class="ai-briefing-block">
-        <div class="tour-stop-marker">📍 Stop ${index + 1}</div>
-        <div class="ai-briefing-label">${escapeHtml(stop.title)}</div>
-        <div class="ai-briefing-file">${escapeHtml(stop.file)}</div>
-      </div>
-      <div class="ai-briefing-divider"></div>
-      <div class="ai-briefing-block">
-        <div class="tour-section-label">Why are we here?</div>
-        <p class="ai-briefing-text">${escapeHtml(stop.whyThisFile)}</p>
-      </div>
-      <div class="ai-briefing-divider"></div>
-      <div class="ai-briefing-block">
-        <div class="tour-section-label">Things to notice</div>
-        <div class="starting-file-why"><ul>${stop.whatToNotice.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul></div>
-      </div>
-      <div class="ai-briefing-divider"></div>
-      ${
-        !isLast && stop.nextReason
-          ? `<div class="tour-next-hint">→ Up next: ${escapeHtml(stop.nextReason)}</div>`
-          : ''
-      }
-    </div>
-    <div class="tour-nav">
-      <button class="ai-link-button" id="ai-tour-previous">← Previous</button>
-      <button class="rescan-button" id="ai-tour-open-file">Open File</button>
-      <button class="ai-explain-button" id="ai-tour-continue">Continue →</button>
-    </div>`;
-}
-
-function renderTourWelcome(tour: GuidedTour): string {
-  if (tour.stops.length === 0) {
-    return `
-      <p class="ai-intro-copy">${escapeHtml(tour.introduction)}</p>
-      <div class="empty-line">No valid starting files were available to build a tour from.</div>
-      <div class="ai-actions">
-        <button class="ai-link-button" id="ai-regenerate">↻ Regenerate</button>
-        <button class="ai-link-button" id="ai-edit-config">⚙ Change API Key</button>
-      </div>`;
-  }
-
-  return `
-    <p class="ai-intro-copy tour-welcome-text">${escapeHtml(tour.introduction)}</p>
-    <div class="ai-actions">
-      <button class="ai-explain-button" id="ai-tour-begin">Let's begin →</button>
-    </div>`;
-}
-
-function renderTourFinished(): string {
-  return `
-    <div class="ai-briefing">
-      <div class="ai-briefing-divider"></div>
-      <div class="ai-briefing-block">
-        <p class="ai-briefing-text">Great!</p>
-        <p class="ai-briefing-text">You now understand the structure of this project.</p>
-        <p class="ai-briefing-text">Next we'll start learning the programming language by using the code you've just explored.</p>
-      </div>
-      <div class="ai-briefing-divider"></div>
-    </div>
-    <div class="ai-actions">
-      <div>
-        <button class="tour-placeholder-button" disabled>Begin Learning →</button>
-        <div class="tour-placeholder-caption">Coming in a future milestone</div>
-      </div>
-      <button class="ai-link-button" id="ai-tour-previous">← Previous</button>
-      <button class="ai-link-button" id="ai-regenerate">↻ Regenerate</button>
-    </div>`;
-}
-
-function renderGuidedTour(): string {
-  const ai = state.ai;
+function renderGuidedTourIntro(): string {
+  const hasStartingFiles = state.result.startingFiles.length > 0;
   const subtitle =
-    ai.tour && ai.currentStopIndex >= 0 && ai.currentStopIndex < ai.tour.stops.length
-      ? `Stop ${ai.currentStopIndex + 1} of ${ai.tour.stops.length}`
-      : ai.configured && ai.provider && ai.model
-        ? `Configured — ${ai.provider} / ${ai.model}`
-        : '';
-  const heading = `
+    state.aiConfig.configured && state.aiConfig.provider && state.aiConfig.model
+      ? `Configured — ${state.aiConfig.provider} / ${state.aiConfig.model}`
+      : '';
+
+  return `
     <div class="screen-heading">
       <h2>✨ Guided Project Tour</h2>
       <p>${escapeHtml(subtitle)}</p>
-    </div>`;
-
-  if (ai.generationStatus === 'generating') {
-    return `${heading}<div class="empty-line">Generating your guided tour…</div>`;
-  }
-
-  if (ai.generationStatus === 'error') {
-    return `
-      ${heading}
-      <div class="empty-line">${escapeHtml(ai.errorMessage ?? 'Generation failed.')}</div>
-      <div class="ai-actions">
-        <button class="ai-explain-button" id="ai-generate">✨ Try Again</button>
-        <button class="ai-link-button" id="ai-edit-config">⚙ Change API Key</button>
-      </div>`;
-  }
-
-  if (ai.generationStatus === 'done' && ai.tour) {
-    const tour = ai.tour;
-    let body: string;
-    if (ai.currentStopIndex < 0) {
-      body = renderTourWelcome(tour);
-    } else if (ai.currentStopIndex >= tour.stops.length) {
-      body = renderTourFinished();
-    } else {
-      body = renderTourStop(tour, ai.currentStopIndex);
-    }
-    return `${heading}${body}`;
-  }
-
-  return `
-    ${heading}
-    <p class="ai-intro-copy">Take a guided walkthrough of this repository, grounded entirely in what the deterministic scan already found — no re-analysis, no invented files.</p>
+    </div>
+    <p class="ai-intro-copy">Take a guided walkthrough of this repository's most important files — grounded entirely in their real code, one file at a time, in the same order as "Where Should You Start?".</p>
     <div class="ai-actions">
-      <button class="ai-explain-button" id="ai-generate">✨ Take the Tour</button>
+      ${
+        hasStartingFiles
+          ? `<button class="ai-explain-button" id="tour-begin">✨ Start Guided Tour</button>`
+          : `<button class="tour-placeholder-button" disabled>✨ Start Guided Tour</button>
+             <div class="tour-placeholder-caption">No starting files were detected yet.</div>`
+      }
       <button class="ai-link-button" id="ai-edit-config">⚙ Change API Key</button>
     </div>`;
 }
 
+function renderConstructBlock(construct: FileLesson['keyConstructs'][number]): string {
+  return `
+    <div class="construct-block">
+      <div class="lesson-snippet">${escapeHtml(construct.snippet)}</div>
+      <div class="construct-lens-row">
+        <span class="construct-lens-label project">Project</span>
+        <p class="ai-briefing-text">${escapeHtml(construct.project)}</p>
+      </div>
+      <div class="construct-lens-row">
+        <span class="construct-lens-label language">Language</span>
+        <p class="ai-briefing-text">${escapeHtml(construct.language)}</p>
+      </div>
+      <div class="construct-lens-row">
+        <span class="construct-lens-label architecture">Architecture</span>
+        <p class="ai-briefing-text">${escapeHtml(construct.architecture)}</p>
+      </div>
+    </div>`;
+}
+
+function renderGuidedTourStep(): string {
+  const candidates = state.result.startingFiles;
+  const total = candidates.length;
+  const file = candidates[state.tour.fileIndex]?.file;
+
+  if (!file) {
+    return renderGuidedTourIntro();
+  }
+
+  const heading = `
+    <div class="screen-heading">
+      <h2>✨ Guided Project Tour</h2>
+      <p>File ${state.tour.fileIndex + 1} of ${total}</p>
+    </div>`;
+
+  if (state.tour.status === 'error') {
+    return `
+      ${heading}
+      <div class="empty-line">${escapeHtml(state.tour.errorMessage ?? 'Could not generate this lesson.')}</div>
+      <div class="tour-nav">
+        <button class="ai-link-button" id="tour-previous">← Previous</button>
+        <button class="ai-explain-button" id="tour-retry">Try Again</button>
+      </div>`;
+  }
+
+  const lesson = state.tour.lessons.get(file);
+  if (state.tour.status !== 'done' || !lesson) {
+    return `${heading}<div class="empty-line">Preparing your walkthrough of ${escapeHtml(file)}…</div>`;
+  }
+
+  const isLast = state.tour.fileIndex === total - 1;
+
+  return `
+    ${heading}
+    <div class="ai-briefing">
+      <div class="ai-briefing-divider"></div>
+      <div class="ai-briefing-block">
+        <div class="tour-section-label">Step 1 — Project Context</div>
+        <div class="ai-briefing-label">${escapeHtml(lesson.title)}</div>
+        <div class="ai-briefing-file">${escapeHtml(lesson.file)}</div>
+        <p class="ai-briefing-text">${escapeHtml(lesson.responsibility)}</p>
+      </div>
+      <div class="ai-briefing-divider"></div>
+      <div class="ai-briefing-block">
+        <div class="tour-section-label">Step 2 — Key Constructs</div>
+        ${lesson.keyConstructs.map(renderConstructBlock).join('')}
+      </div>
+      <div class="ai-briefing-divider"></div>
+    </div>
+    <div class="tour-nav">
+      <button class="ai-link-button" id="tour-previous">← Previous</button>
+      <button class="rescan-button" id="tour-open-file">Open File</button>
+      <button class="ai-link-button" id="tour-return-overview">Return to Overview</button>
+      <button class="ai-explain-button" id="tour-next" ${isLast ? 'disabled' : ''}>${isLast ? 'Tour complete' : 'Next →'}</button>
+    </div>`;
+}
+
 function renderGuidedTourScreen(): string {
-  if (state.ai.editingConfig || !state.ai.configured) {
+  if (state.aiConfig.editingConfig || !state.aiConfig.configured) {
     return renderAISettingsForm();
   }
-  return renderGuidedTour();
+  if (!state.tour.active) {
+    return renderGuidedTourIntro();
+  }
+  return renderGuidedTourStep();
 }
 
 function renderHeader(): string {
@@ -469,6 +458,29 @@ function renderFullPageState(title: string, body: string, showRetry: boolean): v
   document.getElementById('retry')?.addEventListener('click', () => {
     vscodeApi.postMessage({ type: 'rescan' });
   });
+}
+
+function goToFile(index: number): void {
+  const candidates = state.result.startingFiles;
+  if (index < 0 || index >= candidates.length) {
+    return;
+  }
+
+  state.tour.active = true;
+  state.tour.fileIndex = index;
+  state.activeTab = 'guidedTour';
+
+  const file = candidates[index]!.file;
+  const cachedLesson = state.tour.lessons.get(file);
+  if (cachedLesson) {
+    state.tour.status = 'done';
+    render();
+    return;
+  }
+
+  state.tour.status = 'generating';
+  render();
+  vscodeApi.postMessage({ type: 'explainFile', file });
 }
 
 function render(): void {
@@ -513,61 +525,86 @@ function render(): void {
   });
 
   document.getElementById('ai-api-key')?.addEventListener('input', (event) => {
-    state.ai.apiKeyDraft = (event.target as HTMLInputElement).value;
+    state.aiConfig.apiKeyDraft = (event.target as HTMLInputElement).value;
   });
   document.getElementById('ai-model')?.addEventListener('input', (event) => {
-    state.ai.modelDraft = (event.target as HTMLInputElement).value;
+    state.aiConfig.modelDraft = (event.target as HTMLInputElement).value;
   });
   document.getElementById('ai-test')?.addEventListener('click', () => {
-    if (!state.ai.apiKeyDraft) return;
-    state.ai.testStatus = 'testing';
+    if (!state.aiConfig.apiKeyDraft) return;
+    state.aiConfig.testStatus = 'testing';
     render();
     vscodeApi.postMessage({
       type: 'aiTestConnection',
-      apiKey: state.ai.apiKeyDraft,
-      model: state.ai.modelDraft || 'gpt-5.5',
+      apiKey: state.aiConfig.apiKeyDraft,
+      model: state.aiConfig.modelDraft || 'gpt-5.5',
     });
   });
   document.getElementById('ai-save')?.addEventListener('click', () => {
-    if (!state.ai.apiKeyDraft) return;
+    if (!state.aiConfig.apiKeyDraft) return;
     vscodeApi.postMessage({
       type: 'aiSaveConfig',
-      apiKey: state.ai.apiKeyDraft,
-      model: state.ai.modelDraft || 'gpt-5.5',
+      apiKey: state.aiConfig.apiKeyDraft,
+      model: state.aiConfig.modelDraft || 'gpt-5.5',
     });
-    state.ai.apiKeyDraft = '';
+    state.aiConfig.apiKeyDraft = '';
   });
   document.getElementById('ai-cancel-edit')?.addEventListener('click', () => {
-    state.ai.editingConfig = false;
+    state.aiConfig.editingConfig = false;
     render();
   });
   document.getElementById('ai-edit-config')?.addEventListener('click', () => {
-    state.ai.editingConfig = true;
+    state.aiConfig.editingConfig = true;
     render();
   });
-  document.getElementById('ai-generate')?.addEventListener('click', () => {
-    vscodeApi.postMessage({ type: 'aiGenerate' });
+
+  document.querySelectorAll<HTMLElement>('.starting-file-open').forEach((button) => {
+    button.addEventListener('click', () => {
+      const index = Number(button.dataset.index);
+      const file = state.result.startingFiles[index]?.file;
+      if (file) {
+        vscodeApi.postMessage({ type: 'openFile', file });
+      }
+    });
   });
-  document.getElementById('ai-regenerate')?.addEventListener('click', () => {
-    vscodeApi.postMessage({ type: 'aiRegenerate' });
+  document.querySelectorAll<HTMLElement>('.starting-file-explain').forEach((button) => {
+    button.addEventListener('click', () => {
+      const index = Number(button.dataset.index);
+      goToFile(index);
+    });
   });
-  document.getElementById('ai-tour-begin')?.addEventListener('click', () => {
-    state.ai.currentStopIndex = 0;
-    render();
+
+  document.getElementById('tour-begin')?.addEventListener('click', () => {
+    goToFile(0);
   });
-  document.getElementById('ai-tour-previous')?.addEventListener('click', () => {
-    state.ai.currentStopIndex = Math.max(-1, state.ai.currentStopIndex - 1);
-    render();
-  });
-  document.getElementById('ai-tour-continue')?.addEventListener('click', () => {
-    state.ai.currentStopIndex += 1;
-    render();
-  });
-  document.getElementById('ai-tour-open-file')?.addEventListener('click', () => {
-    const stop = state.ai.tour?.stops[state.ai.currentStopIndex];
-    if (stop) {
-      vscodeApi.postMessage({ type: 'openFile', file: stop.file });
+  document.getElementById('tour-previous')?.addEventListener('click', () => {
+    if (state.tour.fileIndex === 0) {
+      state.tour.active = false;
+      render();
+      return;
     }
+    goToFile(state.tour.fileIndex - 1);
+  });
+  document.getElementById('tour-next')?.addEventListener('click', () => {
+    goToFile(state.tour.fileIndex + 1);
+  });
+  document.getElementById('tour-retry')?.addEventListener('click', () => {
+    const file = state.result.startingFiles[state.tour.fileIndex]?.file;
+    if (file) {
+      state.tour.status = 'generating';
+      render();
+      vscodeApi.postMessage({ type: 'explainFile', file });
+    }
+  });
+  document.getElementById('tour-open-file')?.addEventListener('click', () => {
+    const file = state.result.startingFiles[state.tour.fileIndex]?.file;
+    if (file) {
+      vscodeApi.postMessage({ type: 'openFile', file });
+    }
+  });
+  document.getElementById('tour-return-overview')?.addEventListener('click', () => {
+    state.activeTab = 'overview';
+    render();
   });
 
   requestAnimationFrame(() => {
@@ -607,30 +644,37 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
       state.errorMessage = message.message;
       break;
     case 'aiConfigStatus':
-      state.ai.configured = message.configured;
-      state.ai.provider = message.provider;
-      state.ai.model = message.model;
-      state.ai.editingConfig = !message.configured;
+      state.aiConfig.configured = message.configured;
+      state.aiConfig.provider = message.provider;
+      state.aiConfig.model = message.model;
+      state.aiConfig.editingConfig = !message.configured;
       if (message.model) {
-        state.ai.modelDraft = message.model;
+        state.aiConfig.modelDraft = message.model;
       }
       break;
     case 'aiTestResult':
-      state.ai.testStatus = message.result.ok ? 'success' : 'failure';
-      state.ai.testMessage = message.result.ok ? undefined : message.result.message;
-      break;
-    case 'aiGenerating':
-      state.ai.generationStatus = 'generating';
-      break;
-    case 'aiResult':
-      state.ai.generationStatus = 'done';
-      state.ai.tour = message.tour;
-      state.ai.cached = message.cached;
-      state.ai.currentStopIndex = -1;
+      state.aiConfig.testStatus = message.result.ok ? 'success' : 'failure';
+      state.aiConfig.testMessage = message.result.ok ? undefined : message.result.message;
       break;
     case 'aiError':
-      state.ai.generationStatus = 'error';
-      state.ai.errorMessage = message.message;
+      console.error('TMTP:', message.message);
+      break;
+    case 'fileLessonGenerating':
+      if (message.file === state.result.startingFiles[state.tour.fileIndex]?.file) {
+        state.tour.status = 'generating';
+      }
+      break;
+    case 'fileLessonResult':
+      state.tour.lessons.set(message.file, message.lesson);
+      if (message.file === state.result.startingFiles[state.tour.fileIndex]?.file) {
+        state.tour.status = 'done';
+      }
+      break;
+    case 'fileLessonError':
+      if (message.file === state.result.startingFiles[state.tour.fileIndex]?.file) {
+        state.tour.status = 'error';
+        state.tour.errorMessage = message.message;
+      }
       break;
   }
 

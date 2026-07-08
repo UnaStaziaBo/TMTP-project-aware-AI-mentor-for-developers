@@ -4,7 +4,7 @@ Teach Me This Project (TMTP) is a project-aware AI mentor for software developer
 
 Unlike traditional coding assistants that begin from a prompt, TMTP first understands the software project itself. It analyzes the repository structure, technologies, conventions, and dependencies before offering guidance, so learning support is grounded in the actual codebase.
 
-TMTP is an early open-source project with three completed milestones: a deterministic project analysis pipeline, a starting-file discovery engine that ranks which files a developer should read first, and — the first AI-powered feature — a Guided Project Tour that walks a developer through those files one at a time, grounded entirely in that deterministic analysis.
+TMTP is an early open-source project with three completed milestones: a deterministic project analysis pipeline, a starting-file discovery engine, and a Guided Project Tour that turns the ranked starting files themselves into the textbook — teaching a project's architecture and its primary language together, one real file at a time.
 
 ## Why TMTP exists
 
@@ -77,30 +77,38 @@ with examples), so the stage produces a ranked list rather than assuming one.
   - confidence normalized to 0.0–1.0
   - never collapses multiple valid starting points into one
 
-### Milestone 3: AI Guided Project Tour
+### Milestone 3: Guided Project Tour
 
-The first AI-powered feature — a single, one-shot generation, not a chat. Instead of
-answering "what technologies are in this project?", it answers "come with me, I'll
-show you this project": a senior-developer-style walkthrough, one file at a time, in
-the order the deterministic Starting File Discovery engine already ranked them. The
-scanner itself is untouched by this milestone.
+The first AI-powered feature, and the first real teaching experience in one: instead
+of a one-shot repository summary, the ranked `startingFiles` list from Milestone 2
+*is* the tour. Clicking **Explain** on any starting-file card generates that file's
+lesson on demand — never a batch of invented stops, never a generic example.
 
-- ✅ AI Guided Project Tour (`packages/ai`)
+- ✅ Guided Project Tour (`packages/ai`, `apps/vscode-extension`)
   - provider abstraction (`AIProvider`) with an OpenAI implementation — designed
     so a second provider is a new implementation, not a call-site change
   - API key stored only in VS Code SecretStorage, never in settings.json, never
     sent to the webview — the webview only ever learns whether a provider is configured
-  - structured JSON response (`GuidedTour`: an introduction plus an ordered list of
-    `TourStop`s), shape-validated on the way in
-  - "never invent files, never reorder the ranking": any stop referencing a file
-    outside the deterministic `startingFiles` list is silently dropped, and the
-    surviving stops are re-sorted to match the scanner's own ranking regardless of
-    what order the model produced
-  - one stop shown at a time, with a "Stop N of M" stepper and an **Open File**
-    button that opens that exact file in the editor — no manual searching
-  - idempotent: cached until the user explicitly regenerates
-  - ends with a placeholder "Begin Learning →" step for the next milestone — inert,
-    not wired to anything yet
+  - `generateFileLesson` grounds every lesson in one real file: its full content,
+    the detected primary language, and the deterministic `reasons` Starting File
+    Discovery already assigned it — never re-analysis, never an invented file
+  - structured JSON response (`FileLesson`: a project-context summary — `title` +
+    `responsibility` — followed by an ordered `keyConstructs` list), shape-validated
+    on the way in
+  - **Step 1 — Project Context**: what the file is responsible for, where it fits,
+    and why it exists, explained before any code is shown
+  - **Step 2 — Key Constructs**: only the handful of constructs that matter (not
+    every line), each with a snippet copied verbatim from the file and three tied-
+    together explanations — Project (what's happening here), Language (which
+    language feature this is), Architecture (why this project chose this approach)
+  - navigation is **Previous** / **Next** / **Return to Overview**, stepping
+    through the same ranked starting-files list — no separate AI-invented stop
+    order to keep in sync
+  - **Open File** opens the current file in the editor from either the starting-files
+    list or the tour itself
+  - idempotent: each file's lesson is cached (in memory and in `workspaceState`)
+    the first time it's generated, so revisiting a file or reopening the panel never
+    re-bills the same generation
 
 ## Architecture
 
@@ -152,13 +160,13 @@ Current projects include:
 ## Testing
 
 The scanner includes integration tests for each golden project; the ai package
-has unit tests for the deterministic context builder, response validation, and
-the OpenAI provider (against a mocked network layer — no real API key needed).
+has unit tests for `FileLesson` response validation and the OpenAI provider
+(against a mocked network layer — no real API key needed).
 
 Current status:
 
 - 123 scanner integration tests
-- 18 ai package tests
+- 14 ai package tests
 - 0 failures
 
 ## Running the project
@@ -168,6 +176,7 @@ pnpm install
 pnpm build
 pnpm --filter @tmpt/scanner test:integration
 pnpm --filter @tmpt/ai test:integration
+pnpm --filter @tmpt/vscode-extension test:integration
 ```
 
 ## Roadmap
@@ -182,7 +191,7 @@ pnpm --filter @tmpt/ai test:integration
   - Infrastructure
   - Dependencies
 - ✅ Starting File Discovery Engine (Milestone 2, deterministic — ships ahead of the Project Graph below)
-- ✅ AI Guided Project Tour (Milestone 3 — first AI feature; one-shot, no chat, no lessons)
+- ✅ Guided Project Tour (Milestone 3 — first AI feature and first real teaching experience; per-file lessons grounded in real code, no chat, no quizzes)
 
 ### Upcoming
 

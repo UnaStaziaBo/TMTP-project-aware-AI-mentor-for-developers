@@ -1,5 +1,5 @@
-import type { AIContext } from '../types/AIContext.js';
-import type { GuidedTour } from '../types/GuidedTour.js';
+import type { FileLesson } from '../types/FileLesson.js';
+import type { FileLessonContext } from '../types/FileLessonContext.js';
 
 export interface AIProviderCredentials {
   apiKey: string;
@@ -17,5 +17,5 @@ export interface AIProvider {
   readonly id: string;
   readonly label: string;
   testConnection(credentials: AIProviderCredentials): Promise<TestConnectionResult>;
-  generateGuidedTour(context: AIContext, credentials: AIProviderCredentials): Promise<GuidedTour>;
+  generateFileLesson(context: FileLessonContext, credentials: AIProviderCredentials): Promise<FileLesson>;
 }
