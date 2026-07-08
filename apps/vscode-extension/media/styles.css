@@ -588,32 +588,62 @@ body {
   margin-top: 14px;
 }
 
-.construct-block {
-  margin-bottom: 22px;
+.construct-card {
+  border-left: 4px solid var(--vscode-charts-blue);
+  background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
+  border-radius: 8px;
+  padding: 18px 20px;
+  margin-bottom: 32px;
 }
 
-.construct-block:last-child {
+.construct-card:last-child {
   margin-bottom: 0;
 }
 
-.construct-lens-row {
-  display: grid;
-  grid-template-columns: 96px 1fr;
-  gap: 10px;
-  margin-bottom: 8px;
-  align-items: baseline;
+.construct-snippet {
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 13.5px;
+  background: var(--vscode-textCodeBlock-background, var(--vscode-editor-background));
+  border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin: 0 0 16px;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
 }
 
-.construct-lens-label {
+.construct-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.construct-row + .construct-row {
+  margin-top: 14px;
+}
+
+.construct-icon {
+  flex: none;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.construct-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.construct-label {
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.4px;
+  margin-bottom: 3px;
 }
 
-.construct-lens-label.project { color: var(--vscode-charts-blue); }
-.construct-lens-label.language { color: var(--vscode-charts-purple); }
-.construct-lens-label.architecture { color: var(--vscode-charts-orange); }
+.construct-label.project { color: var(--vscode-charts-blue); }
+.construct-label.language { color: var(--vscode-charts-purple); }
+.construct-label.architecture { color: var(--vscode-charts-orange); }
 
 /* ---- Sections ---- */
 

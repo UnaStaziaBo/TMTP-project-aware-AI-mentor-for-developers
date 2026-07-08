@@ -348,21 +348,30 @@ function renderGuidedTourIntro(): string {
     </div>`;
 }
 
-function renderConstructBlock(construct: FileLesson['keyConstructs'][number]): string {
+function renderConstructCard(construct: FileLesson['keyConstructs'][number]): string {
   return `
-    <div class="construct-block">
-      <div class="lesson-snippet">${escapeHtml(construct.snippet)}</div>
-      <div class="construct-lens-row">
-        <span class="construct-lens-label project">Project</span>
-        <p class="ai-briefing-text">${escapeHtml(construct.project)}</p>
+    <div class="construct-card">
+      <pre class="construct-snippet">${escapeHtml(construct.snippet)}</pre>
+      <div class="construct-row">
+        <span class="construct-icon">📦</span>
+        <div class="construct-text">
+          <div class="construct-label project">Role in this project</div>
+          <p class="ai-briefing-text">${escapeHtml(construct.project)}</p>
+        </div>
       </div>
-      <div class="construct-lens-row">
-        <span class="construct-lens-label language">Language</span>
-        <p class="ai-briefing-text">${escapeHtml(construct.language)}</p>
+      <div class="construct-row">
+        <span class="construct-icon">🔷</span>
+        <div class="construct-text">
+          <div class="construct-label language">Language</div>
+          <p class="ai-briefing-text">${escapeHtml(construct.language)}</p>
+        </div>
       </div>
-      <div class="construct-lens-row">
-        <span class="construct-lens-label architecture">Architecture</span>
-        <p class="ai-briefing-text">${escapeHtml(construct.architecture)}</p>
+      <div class="construct-row">
+        <span class="construct-icon">🏗</span>
+        <div class="construct-text">
+          <div class="construct-label architecture">Why it matters</div>
+          <p class="ai-briefing-text">${escapeHtml(construct.architecture)}</p>
+        </div>
       </div>
     </div>`;
 }
@@ -412,7 +421,7 @@ function renderGuidedTourStep(): string {
       <div class="ai-briefing-divider"></div>
       <div class="ai-briefing-block">
         <div class="tour-section-label">Step 2 — Key Constructs</div>
-        ${lesson.keyConstructs.map(renderConstructBlock).join('')}
+        ${lesson.keyConstructs.map(renderConstructCard).join('')}
       </div>
       <div class="ai-briefing-divider"></div>
     </div>
