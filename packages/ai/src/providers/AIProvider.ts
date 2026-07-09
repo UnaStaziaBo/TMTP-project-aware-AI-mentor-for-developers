@@ -1,5 +1,7 @@
 import type { FileLesson } from '../types/FileLesson.js';
 import type { FileLessonContext } from '../types/FileLessonContext.js';
+import type { PracticePlan } from '../types/PracticePlan.js';
+import type { PracticePlanContext } from '../types/PracticePlanContext.js';
 
 export interface AIProviderCredentials {
   apiKey: string;
@@ -18,4 +20,5 @@ export interface AIProvider {
   readonly label: string;
   testConnection(credentials: AIProviderCredentials): Promise<TestConnectionResult>;
   generateFileLesson(context: FileLessonContext, credentials: AIProviderCredentials): Promise<FileLesson>;
+  generatePracticePlan(context: PracticePlanContext, credentials: AIProviderCredentials): Promise<PracticePlan>;
 }

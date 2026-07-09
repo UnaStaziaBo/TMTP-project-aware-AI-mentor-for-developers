@@ -645,6 +645,234 @@ body {
 .construct-label.language { color: var(--vscode-charts-purple); }
 .construct-label.architecture { color: var(--vscode-charts-orange); }
 
+/* ---- Learning readiness / practice ---- */
+
+.confidence-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 420px;
+  margin-top: 16px;
+}
+
+.confidence-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: inherit;
+  font-size: 13.5px;
+  text-align: left;
+  color: var(--vscode-foreground);
+  background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
+  border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
+  border-radius: 6px;
+  padding: 12px 14px;
+  cursor: pointer;
+}
+
+.confidence-option:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.confidence-option-radio {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--vscode-widget-border, var(--vscode-panel-border));
+}
+
+.confidence-option.selected {
+  border-color: var(--vscode-charts-blue);
+}
+
+.confidence-option.selected .confidence-option-radio {
+  border-color: var(--vscode-charts-blue);
+  background: var(--vscode-charts-blue);
+}
+
+.scenario-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 480px;
+}
+
+.scenario-option {
+  font-family: inherit;
+  font-size: 13.5px;
+  text-align: left;
+  color: var(--vscode-foreground);
+  background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
+  border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
+  border-radius: 6px;
+  padding: 12px 14px;
+  cursor: pointer;
+}
+
+.scenario-option:not(:disabled):hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.scenario-option:disabled {
+  cursor: default;
+}
+
+.scenario-option.correct {
+  border-color: var(--vscode-charts-green);
+  background: color-mix(in srgb, var(--vscode-charts-green) 12%, transparent);
+}
+
+.scenario-option.incorrect {
+  border-color: var(--vscode-charts-red, var(--vscode-errorForeground));
+  background: color-mix(in srgb, var(--vscode-charts-red, var(--vscode-errorForeground)) 10%, transparent);
+}
+
+.scenario-option.correct-reveal {
+  border-color: var(--vscode-charts-green);
+}
+
+.scenario-explanation {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
+}
+
+/* ---- Project Knowledge Map ---- */
+
+.knowledge-map {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.km-area {
+  border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
+  border-radius: 8px;
+  background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
+  overflow: hidden;
+}
+
+.km-area-large { border-left: 4px solid var(--vscode-charts-blue); }
+.km-area-medium { border-left: 4px solid var(--vscode-charts-purple); }
+.km-area-small { border-left: 4px solid var(--vscode-widget-border, var(--vscode-panel-border)); }
+
+.km-area-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--vscode-foreground);
+  background: transparent;
+  border: none;
+  padding: 14px 16px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.km-area-header:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.km-area-chevron {
+  flex: none;
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+}
+
+.km-area-name {
+  flex: 1;
+}
+
+.km-area-count {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--vscode-descriptionForeground);
+}
+
+.km-nodes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+  padding: 0 14px 16px;
+}
+
+.km-node {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-family: inherit;
+  text-align: left;
+  color: var(--vscode-foreground);
+  background: var(--vscode-editor-background);
+  border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
+  border-radius: 6px;
+  padding: 12px 14px;
+  cursor: pointer;
+}
+
+.km-node:hover {
+  border-color: var(--vscode-focusBorder);
+}
+
+.km-node-large {
+  padding: 16px 18px;
+}
+
+.km-node-large .km-node-title {
+  font-size: 14.5px;
+}
+
+.km-node-small {
+  padding: 9px 12px;
+  opacity: 0.85;
+}
+
+.km-node-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.km-node-status {
+  flex: none;
+  font-size: 12px;
+}
+
+.km-node-title {
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: break-word;
+}
+
+.km-node-description {
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.km-node-meta {
+  display: grid;
+  grid-template-columns: 1fr 32px;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.km-node-meta .bar-fill {
+  background: var(--vscode-charts-blue);
+}
+
+.km-node-actions {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
 /* ---- Sections ---- */
 
 .section {

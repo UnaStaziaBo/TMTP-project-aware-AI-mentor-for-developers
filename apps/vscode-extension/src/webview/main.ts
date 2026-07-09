@@ -1,13 +1,14 @@
 import type { ProjectScanResult } from '@tmpt/scanner';
-import type { FileLesson } from '@tmpt/ai';
-import { STAGES, type ExtensionMessage, type StageKey } from '../protocol.js';
+import type { FileLesson, PracticePlan } from '@tmpt/ai';
+import { buildKnowledgeMapAreas, type KnowledgeMapArea, type KnowledgeMapNode } from '../knowledgeMap.js';
+import { STAGES, type ExtensionMessage, type FileConfidence, type StageKey } from '../protocol.js';
 
 declare function acquireVsCodeApi(): { postMessage(message: unknown): void };
 
 const vscodeApi = acquireVsCodeApi();
 const root = document.getElementById('root')!;
 
-type Tab = 'overview' | 'startingFiles' | 'guidedTour';
+type Tab = 'overview' | 'startingFiles' | 'guidedTour' | 'knowledgeMap';
 
 interface AIConfigState {
   configured: boolean;
@@ -30,6 +31,52 @@ interface GuidedTourState {
   errorMessage?: string;
 }
 
+/**
+ * 'idle' = still touring. Everything else replaces the tour-step screen
+ * with the post-tour Learning Readiness Assessment: a confidence check per
+ * toured file, then an AI-generated set of realistic "first day" scenarios
+ * weighted toward the files the developer felt least confident about.
+ */
+interface PracticeState {
+  phase: 'idle' | 'confidence' | 'generating' | 'ready' | 'error' | 'done';
+  confidenceIndex: number;
+  ratings: Record<string, FileConfidence>;
+  plan?: PracticePlan;
+  scenarioIndex: number;
+  selectedOption?: number;
+  errorMessage?: string;
+}
+
+function createInitialPracticeState(): PracticeState {
+  return { phase: 'idle', confidenceIndex: 0, ratings: {}, scenarioIndex: 0 };
+}
+
+/** Server-reported learning progress — persists across sessions, so the Knowledge Map is accurate on first open. */
+interface LearningProgressState {
+  explained: Set<string>;
+  practiced: Set<string>;
+  mastered: Set<string>;
+}
+
+/** The node currently opened from the Knowledge Map, and which of its three actions is showing. */
+interface KnowledgeMapNodeDetailState {
+  file: string;
+  view: 'menu' | 'explain' | 'practice';
+  explainStatus: 'idle' | 'generating' | 'done' | 'error';
+  explainError?: string;
+  practiceStatus: 'idle' | 'generating' | 'ready' | 'error';
+  practiceScenarioIndex: number;
+  practiceSelectedOption?: number;
+  practiceError?: string;
+}
+
+interface KnowledgeMapState {
+  expandedArea: string | null;
+  node?: KnowledgeMapNodeDetailState;
+  /** Single-file practice plans, separate from the tour-wide "Day 1 Practice" plan. */
+  filePracticePlans: Map<string, PracticePlan>;
+}
+
 interface State {
   status: 'scanning' | 'done' | 'no-workspace' | 'error';
   projectName: string;
@@ -41,6 +88,9 @@ interface State {
   activeTab: Tab;
   aiConfig: AIConfigState;
   tour: GuidedTourState;
+  practice: PracticeState;
+  learningProgress: LearningProgressState;
+  knowledgeMap: KnowledgeMapState;
 }
 
 const emptyResult: ProjectScanResult = {
@@ -76,7 +126,28 @@ const state: State = {
     status: 'idle',
     lessons: new Map(),
   },
+  practice: createInitialPracticeState(),
+  learningProgress: { explained: new Set(), practiced: new Set(), mastered: new Set() },
+  knowledgeMap: { expandedArea: null, filePracticePlans: new Map() },
 };
+
+function learningStatusFor(file: string): { icon: string; label: string } {
+  if (state.learningProgress.mastered.has(file)) {
+    return { icon: '⭐', label: 'Mastered' };
+  }
+  if (state.learningProgress.practiced.has(file)) {
+    return { icon: '🟢', label: 'Practiced' };
+  }
+  if (state.learningProgress.explained.has(file) || state.tour.lessons.has(file)) {
+    return { icon: '🟡', label: 'Explained' };
+  }
+  return { icon: '⚪', label: 'Not visited' };
+}
+
+/** The toured files, in the same order as "Where Should I Start?", filtered to ones actually explained. */
+function touredFiles(): string[] {
+  return state.result.startingFiles.map((c) => c.file).filter((file) => state.tour.lessons.has(file));
+}
 
 function escapeHtml(value: string): string {
   return value
@@ -210,8 +281,9 @@ function renderFileTypes(): string {
 
 const TABS: Array<[Tab, string]> = [
   ['overview', 'Project Overview'],
-  ['startingFiles', '🚀 Where Should You Start?'],
-  ['guidedTour', '✨ Guided Tour'],
+  ['startingFiles', 'Where Should I Start?'],
+  ['guidedTour', 'Guided Tour'],
+  ['knowledgeMap', '🗺️ Knowledge Map'],
 ];
 
 function renderTabBar(): string {
@@ -245,7 +317,7 @@ function renderStartingFilesScreen(): string {
     const stillScanning = state.status === 'scanning' && !state.completed.has('startingFiles');
     return `
       <div class="screen-heading">
-        <h2>🚀 Where Should You Start?</h2>
+        <h2>Where Should I Start?</h2>
         <p>Recommended Starting Files</p>
       </div>
       <div class="empty-line">${
@@ -255,7 +327,7 @@ function renderStartingFilesScreen(): string {
 
   return `
     <div class="screen-heading">
-      <h2>🚀 Where Should You Start?</h2>
+      <h2>Where Should I Start?</h2>
       <p>Recommended Starting Files</p>
     </div>
     <p class="starting-files-intro">If you have never seen this project before, start here.</p>
@@ -301,7 +373,7 @@ function renderAISettingsForm(): string {
 
   return `
     <div class="screen-heading">
-      <h2>✨ Guided Project Tour</h2>
+      <h2>Guided Project Tour</h2>
       <p>Configure an AI provider</p>
     </div>
     <div class="ai-settings-form">
@@ -333,15 +405,15 @@ function renderGuidedTourIntro(): string {
 
   return `
     <div class="screen-heading">
-      <h2>✨ Guided Project Tour</h2>
+      <h2>Guided Project Tour</h2>
       <p>${escapeHtml(subtitle)}</p>
     </div>
-    <p class="ai-intro-copy">Take a guided walkthrough of this repository's most important files — grounded entirely in their real code, one file at a time, in the same order as "Where Should You Start?".</p>
+    <p class="ai-intro-copy">Take a guided walkthrough of this repository's most important files — grounded entirely in their real code, one file at a time, in the same order as "Where Should I Start?".</p>
     <div class="ai-actions">
       ${
         hasStartingFiles
-          ? `<button class="ai-explain-button" id="tour-begin">✨ Start Guided Tour</button>`
-          : `<button class="tour-placeholder-button" disabled>✨ Start Guided Tour</button>
+          ? `<button class="ai-explain-button" id="tour-begin">Start Guided Tour</button>`
+          : `<button class="tour-placeholder-button" disabled>Start Guided Tour</button>
              <div class="tour-placeholder-caption">No starting files were detected yet.</div>`
       }
       <button class="ai-link-button" id="ai-edit-config">⚙ Change API Key</button>
@@ -387,7 +459,7 @@ function renderGuidedTourStep(): string {
 
   const heading = `
     <div class="screen-heading">
-      <h2>✨ Guided Project Tour</h2>
+      <h2>Guided Project Tour</h2>
       <p>File ${state.tour.fileIndex + 1} of ${total}</p>
     </div>`;
 
@@ -429,13 +501,352 @@ function renderGuidedTourStep(): string {
       <button class="ai-link-button" id="tour-previous">← Previous</button>
       <button class="rescan-button" id="tour-open-file">Open File</button>
       <button class="ai-link-button" id="tour-return-overview">Return to Overview</button>
-      <button class="ai-explain-button" id="tour-next" ${isLast ? 'disabled' : ''}>${isLast ? 'Tour complete' : 'Next →'}</button>
+      <button class="ai-explain-button" id="${isLast ? 'tour-start-assessment' : 'tour-next'}">${isLast ? 'Start Self-Assessment →' : 'Next →'}</button>
+    </div>`;
+}
+
+function renderConfidenceScreen(): string {
+  const files = touredFiles();
+  const file = files[state.practice.confidenceIndex];
+
+  if (!file) {
+    return `
+      <div class="screen-heading">
+        <h2>🧭 Learning Readiness Check</h2>
+      </div>
+      <div class="empty-line">No toured files to assess yet.</div>`;
+  }
+
+  const selected = state.practice.ratings[file];
+  const levels: Array<{ level: FileConfidence; label: string }> = [
+    { level: 'green', label: '🟢 I understand it well' },
+    { level: 'yellow', label: '🟡 I mostly understand it' },
+    { level: 'red', label: '🔴 I would like to learn this better' },
+  ];
+
+  return `
+    <div class="screen-heading">
+      <h2>🧭 Learning Readiness Check</h2>
+      <p>File ${state.practice.confidenceIndex + 1} of ${files.length}</p>
+    </div>
+    <p class="ai-intro-copy">How confident do you feel working with this file?</p>
+    <div class="ai-briefing-file">${escapeHtml(file)}</div>
+    <div class="confidence-options">
+      ${levels
+        .map(
+          ({ level, label }) => `
+        <button class="confidence-option ${selected === level ? 'selected' : ''}" data-level="${level}">
+          <span class="confidence-option-radio"></span>
+          <span>${label}</span>
+        </button>`,
+        )
+        .join('')}
+    </div>
+    <div class="tour-nav">
+      ${state.practice.confidenceIndex > 0 ? `<button class="ai-link-button" id="confidence-previous">← Previous</button>` : ''}
+      <button class="ai-link-button" id="practice-return-overview">Return to Overview</button>
+    </div>`;
+}
+
+function renderPracticeGeneratingScreen(): string {
+  return `
+    <div class="screen-heading">
+      <h2>🧭 Day 1 Practice</h2>
+    </div>
+    <div class="empty-line">Building your personalized practice plan…</div>`;
+}
+
+function renderPracticeErrorScreen(): string {
+  return `
+    <div class="screen-heading">
+      <h2>🧭 Day 1 Practice</h2>
+    </div>
+    <div class="empty-line">${escapeHtml(state.practice.errorMessage ?? 'Could not build a practice plan.')}</div>
+    <div class="tour-nav">
+      <button class="ai-link-button" id="practice-return-overview">Return to Overview</button>
+      <button class="ai-explain-button" id="practice-retry">Try Again</button>
+    </div>`;
+}
+
+function renderScenarioScreen(): string {
+  const plan = state.practice.plan;
+  if (!plan || plan.scenarios.length === 0) {
+    return renderPracticeErrorScreen();
+  }
+
+  const total = plan.scenarios.length;
+  const index = state.practice.scenarioIndex;
+  if (index >= total) {
+    return renderPracticeDoneScreen();
+  }
+
+  const scenario = plan.scenarios[index]!;
+  const answered = state.practice.selectedOption !== undefined;
+  const gotItRight = answered && scenario.options[state.practice.selectedOption!] === scenario.correctOption;
+
+  return `
+    <div class="screen-heading">
+      <h2>🧭 Day 1 Practice</h2>
+      <p>Scenario ${index + 1} of ${total}</p>
+    </div>
+    <div class="ai-briefing">
+      <div class="ai-briefing-divider"></div>
+      <div class="ai-briefing-block">
+        <div class="tour-section-label">Scenario</div>
+        <p class="ai-briefing-text">${escapeHtml(scenario.situation)}</p>
+      </div>
+      <div class="ai-briefing-divider"></div>
+      <div class="ai-briefing-block">
+        <div class="scenario-options">
+          ${scenario.options
+            .map((option, i) => {
+              const isCorrect = option === scenario.correctOption;
+              const isSelected = state.practice.selectedOption === i;
+              const cls = !answered ? '' : isSelected && isCorrect ? 'correct' : isSelected ? 'incorrect' : isCorrect ? 'correct-reveal' : '';
+              return `<button class="scenario-option ${cls}" data-index="${i}" ${answered ? 'disabled' : ''}>${escapeHtml(option)}</button>`;
+            })
+            .join('')}
+        </div>
+        ${
+          answered
+            ? `
+        <div class="scenario-explanation">
+          <div class="tour-section-label">${gotItRight ? '✓ Good reasoning' : "Let's look at why"}</div>
+          <p class="ai-briefing-text">${escapeHtml(scenario.explanation)}</p>
+        </div>`
+            : ''
+        }
+      </div>
+      <div class="ai-briefing-divider"></div>
+    </div>
+    <div class="tour-nav">
+      <button class="ai-link-button" id="practice-return-overview">Return to Overview</button>
+      ${answered ? `<button class="ai-explain-button" id="scenario-continue">${index + 1 === total ? 'Finish' : 'Continue →'}</button>` : ''}
+    </div>`;
+}
+
+function renderPracticeDoneScreen(): string {
+  return `
+    <div class="screen-heading">
+      <h2>🧭 Day 1 Practice</h2>
+    </div>
+    <div class="ai-briefing">
+      <div class="ai-briefing-divider"></div>
+      <div class="ai-briefing-block">
+        <p class="ai-briefing-text">You now know where to start when you receive your first task on this project.</p>
+      </div>
+      <div class="ai-briefing-divider"></div>
+    </div>
+    <div class="tour-nav">
+      <button class="ai-link-button" id="practice-return-overview">Return to Overview</button>
+    </div>`;
+}
+
+function renderPracticeFlow(): string {
+  switch (state.practice.phase) {
+    case 'confidence':
+      return renderConfidenceScreen();
+    case 'generating':
+      return renderPracticeGeneratingScreen();
+    case 'ready':
+      return renderScenarioScreen();
+    case 'error':
+      return renderPracticeErrorScreen();
+    case 'done':
+      return renderPracticeDoneScreen();
+    case 'idle':
+      return '';
+  }
+}
+
+function renderKnowledgeMapNodeCard(node: KnowledgeMapNode): string {
+  const status = learningStatusFor(node.file);
+  const percent = Math.round(node.confidence * 100);
+  return `
+    <button class="km-node km-node-${node.tier}" data-file="${escapeHtml(node.file)}">
+      <div class="km-node-top">
+        <span class="km-node-status" title="${escapeHtml(status.label)}">${status.icon}</span>
+        <span class="km-node-title">${escapeHtml(node.title)}</span>
+      </div>
+      <div class="km-node-description">${escapeHtml(node.description)}</div>
+      <div class="km-node-meta">
+        <span class="bar-track"><span class="bar-fill" data-target="${percent}"></span></span>
+        <span class="percent">${percent}%</span>
+      </div>
+    </button>`;
+}
+
+function renderKnowledgeMapAreaCard(area: KnowledgeMapArea): string {
+  const expanded = state.knowledgeMap.expandedArea === area.area;
+  return `
+    <div class="km-area km-area-${area.tier}">
+      <button class="km-area-header" data-area="${escapeHtml(area.area)}">
+        <span class="km-area-chevron">${expanded ? '▾' : '▸'}</span>
+        <span class="km-area-name">${escapeHtml(area.area)}</span>
+        <span class="km-area-count">${area.nodes.length} file${area.nodes.length === 1 ? '' : 's'}</span>
+      </button>
+      ${
+        expanded
+          ? `<div class="km-nodes">${area.nodes.map(renderKnowledgeMapNodeCard).join('')}</div>`
+          : ''
+      }
+    </div>`;
+}
+
+function renderKnowledgeMapExplainView(node: KnowledgeMapNodeDetailState): string {
+  if (node.explainStatus === 'error') {
+    return `
+      <div class="empty-line">${escapeHtml(node.explainError ?? 'Could not generate this lesson.')}</div>
+      <div class="tour-nav"><button class="ai-explain-button" id="km-explain-retry">Try Again</button></div>`;
+  }
+
+  const lesson = state.tour.lessons.get(node.file);
+  if (node.explainStatus !== 'done' || !lesson) {
+    return `<div class="empty-line">Preparing your walkthrough of ${escapeHtml(node.file)}…</div>`;
+  }
+
+  return `
+    <div class="ai-briefing">
+      <div class="ai-briefing-divider"></div>
+      <div class="ai-briefing-block">
+        <div class="tour-section-label">Project Context</div>
+        <div class="ai-briefing-label">${escapeHtml(lesson.title)}</div>
+        <p class="ai-briefing-text">${escapeHtml(lesson.responsibility)}</p>
+      </div>
+      <div class="ai-briefing-divider"></div>
+      <div class="ai-briefing-block">
+        <div class="tour-section-label">Key Constructs</div>
+        ${lesson.keyConstructs.map(renderConstructCard).join('')}
+      </div>
+      <div class="ai-briefing-divider"></div>
+    </div>`;
+}
+
+function renderKnowledgeMapPracticeView(node: KnowledgeMapNodeDetailState): string {
+  if (node.practiceStatus === 'error') {
+    return `
+      <div class="empty-line">${escapeHtml(node.practiceError ?? 'Could not build practice scenarios.')}</div>
+      <div class="tour-nav"><button class="ai-explain-button" id="km-practice-retry">Try Again</button></div>`;
+  }
+
+  const plan = state.knowledgeMap.filePracticePlans.get(node.file);
+  if (node.practiceStatus !== 'ready' || !plan) {
+    return `<div class="empty-line">Building practice scenarios for ${escapeHtml(node.file)}…</div>`;
+  }
+
+  const total = plan.scenarios.length;
+  const index = node.practiceScenarioIndex;
+  if (index >= total) {
+    return `
+      <div class="ai-briefing">
+        <div class="ai-briefing-divider"></div>
+        <div class="ai-briefing-block">
+          <p class="ai-briefing-text">You've worked through every practice scenario for this file.</p>
+        </div>
+        <div class="ai-briefing-divider"></div>
+      </div>`;
+  }
+
+  const scenario = plan.scenarios[index]!;
+  const answered = node.practiceSelectedOption !== undefined;
+  const gotItRight = answered && scenario.options[node.practiceSelectedOption!] === scenario.correctOption;
+
+  return `
+    <div class="tour-progress">Scenario ${index + 1} of ${total}</div>
+    <div class="ai-briefing">
+      <div class="ai-briefing-divider"></div>
+      <div class="ai-briefing-block">
+        <div class="tour-section-label">Scenario</div>
+        <p class="ai-briefing-text">${escapeHtml(scenario.situation)}</p>
+      </div>
+      <div class="ai-briefing-divider"></div>
+      <div class="ai-briefing-block">
+        <div class="scenario-options">
+          ${scenario.options
+            .map((option, i) => {
+              const isCorrect = option === scenario.correctOption;
+              const isSelected = node.practiceSelectedOption === i;
+              const cls = !answered ? '' : isSelected && isCorrect ? 'correct' : isSelected ? 'incorrect' : isCorrect ? 'correct-reveal' : '';
+              return `<button class="scenario-option km-scenario-option ${cls}" data-index="${i}" ${answered ? 'disabled' : ''}>${escapeHtml(option)}</button>`;
+            })
+            .join('')}
+        </div>
+        ${
+          answered
+            ? `
+        <div class="scenario-explanation">
+          <div class="tour-section-label">${gotItRight ? '✓ Good reasoning' : "Let's look at why"}</div>
+          <p class="ai-briefing-text">${escapeHtml(scenario.explanation)}</p>
+        </div>`
+            : ''
+        }
+      </div>
+      <div class="ai-briefing-divider"></div>
+    </div>
+    ${answered ? `<div class="tour-nav"><button class="ai-explain-button" id="km-scenario-continue">${index + 1 === total ? 'Finish' : 'Continue →'}</button></div>` : ''}`;
+}
+
+function renderKnowledgeMapNodeDetail(node: KnowledgeMapNodeDetailState): string {
+  const status = learningStatusFor(node.file);
+  const heading = `
+    <div class="screen-heading">
+      <h2>🗺️ ${escapeHtml(node.file)}</h2>
+      <p>${status.icon} ${escapeHtml(status.label)}</p>
+    </div>`;
+  const backNav = `<div class="tour-nav"><button class="ai-link-button" id="km-back">← Back to map</button></div>`;
+
+  if (node.view === 'explain') {
+    return `${heading}${renderKnowledgeMapExplainView(node)}${backNav}`;
+  }
+  if (node.view === 'practice') {
+    return `${heading}${renderKnowledgeMapPracticeView(node)}${backNav}`;
+  }
+
+  return `
+    ${heading}
+    <div class="ai-actions km-node-actions">
+      <button class="rescan-button" id="km-open-file">Open File</button>
+      <button class="ai-explain-button" id="km-explain-file">Explain this File</button>
+      <button class="ai-explain-button" id="km-practice-file">Practice this File</button>
+    </div>
+    ${backNav}`;
+}
+
+function renderKnowledgeMapScreen(): string {
+  const candidates = state.result.startingFiles;
+
+  if (candidates.length === 0) {
+    return `
+      <div class="screen-heading">
+        <h2>Project Knowledge Map</h2>
+        <p>Your long-term navigation system</p>
+      </div>
+      <div class="empty-line">No important files detected yet.</div>`;
+  }
+
+  if (state.knowledgeMap.node) {
+    return renderKnowledgeMapNodeDetail(state.knowledgeMap.node);
+  }
+
+  const areas = buildKnowledgeMapAreas(candidates);
+
+  return `
+    <div class="screen-heading">
+      <h2>Project Knowledge Map</h2>
+      <p>What should you learn next?</p>
+    </div>
+    <p class="starting-files-intro">Built entirely from the deterministic scan — no AI. Expand an area to see its files, ranked by importance.</p>
+    <div class="knowledge-map">
+      ${areas.map(renderKnowledgeMapAreaCard).join('')}
     </div>`;
 }
 
 function renderGuidedTourScreen(): string {
   if (state.aiConfig.editingConfig || !state.aiConfig.configured) {
     return renderAISettingsForm();
+  }
+  if (state.practice.phase !== 'idle') {
+    return renderPracticeFlow();
   }
   if (!state.tour.active) {
     return renderGuidedTourIntro();
@@ -512,7 +923,9 @@ function render(): void {
       ? renderOverviewBody()
       : state.activeTab === 'startingFiles'
         ? renderStartingFilesScreen()
-        : renderGuidedTourScreen();
+        : state.activeTab === 'knowledgeMap'
+          ? renderKnowledgeMapScreen()
+          : renderGuidedTourScreen();
 
   root.innerHTML = `
     ${renderHeader()}
@@ -528,7 +941,8 @@ function render(): void {
   document.querySelectorAll<HTMLElement>('.tab-button').forEach((button) => {
     button.addEventListener('click', () => {
       const tab = button.dataset.tab;
-      state.activeTab = tab === 'startingFiles' || tab === 'guidedTour' ? tab : 'overview';
+      state.activeTab =
+        tab === 'startingFiles' || tab === 'guidedTour' || tab === 'knowledgeMap' ? tab : 'overview';
       render();
     });
   });
@@ -616,6 +1030,171 @@ function render(): void {
     render();
   });
 
+  document.getElementById('tour-start-assessment')?.addEventListener('click', () => {
+    state.practice = createInitialPracticeState();
+    state.practice.phase = 'confidence';
+    render();
+  });
+
+  document.querySelectorAll<HTMLElement>('.confidence-option').forEach((button) => {
+    button.addEventListener('click', () => {
+      const level = button.dataset.level as FileConfidence;
+      const files = touredFiles();
+      const file = files[state.practice.confidenceIndex];
+      if (!file) return;
+
+      state.practice.ratings[file] = level;
+
+      if (state.practice.confidenceIndex + 1 < files.length) {
+        state.practice.confidenceIndex += 1;
+        render();
+        return;
+      }
+
+      state.practice.phase = 'generating';
+      render();
+      vscodeApi.postMessage({ type: 'submitConfidenceProfile', ratings: { ...state.practice.ratings } });
+    });
+  });
+  document.getElementById('confidence-previous')?.addEventListener('click', () => {
+    state.practice.confidenceIndex = Math.max(0, state.practice.confidenceIndex - 1);
+    render();
+  });
+
+  document.querySelectorAll<HTMLElement>('.scenario-option').forEach((button) => {
+    button.addEventListener('click', () => {
+      const index = Number(button.dataset.index);
+      const scenario = state.practice.plan?.scenarios[state.practice.scenarioIndex];
+      state.practice.selectedOption = index;
+      render();
+      if (scenario) {
+        vscodeApi.postMessage({
+          type: 'recordPracticeAttempt',
+          file: scenario.correctOption,
+          correct: scenario.options[index] === scenario.correctOption,
+        });
+      }
+    });
+  });
+  document.getElementById('scenario-continue')?.addEventListener('click', () => {
+    const plan = state.practice.plan;
+    if (!plan) return;
+    state.practice.scenarioIndex += 1;
+    state.practice.selectedOption = undefined;
+    if (state.practice.scenarioIndex >= plan.scenarios.length) {
+      state.practice.phase = 'done';
+    }
+    render();
+  });
+  document.getElementById('practice-retry')?.addEventListener('click', () => {
+    state.practice.phase = 'generating';
+    render();
+    vscodeApi.postMessage({ type: 'submitConfidenceProfile', ratings: { ...state.practice.ratings } });
+  });
+  document.getElementById('practice-return-overview')?.addEventListener('click', () => {
+    state.activeTab = 'overview';
+    render();
+  });
+
+  document.querySelectorAll<HTMLElement>('.km-area-header').forEach((button) => {
+    button.addEventListener('click', () => {
+      const area = button.dataset.area;
+      if (!area) return;
+      state.knowledgeMap.expandedArea = state.knowledgeMap.expandedArea === area ? null : area;
+      render();
+    });
+  });
+  document.querySelectorAll<HTMLElement>('.km-node').forEach((button) => {
+    button.addEventListener('click', () => {
+      const file = button.dataset.file;
+      if (!file) return;
+      state.knowledgeMap.node = {
+        file,
+        view: 'menu',
+        explainStatus: 'idle',
+        practiceStatus: 'idle',
+        practiceScenarioIndex: 0,
+      };
+      render();
+    });
+  });
+  document.getElementById('km-back')?.addEventListener('click', () => {
+    state.knowledgeMap.node = undefined;
+    render();
+  });
+  document.getElementById('km-open-file')?.addEventListener('click', () => {
+    const file = state.knowledgeMap.node?.file;
+    if (file) {
+      vscodeApi.postMessage({ type: 'openFile', file });
+    }
+  });
+  document.getElementById('km-explain-file')?.addEventListener('click', () => {
+    const node = state.knowledgeMap.node;
+    if (!node) return;
+    node.view = 'explain';
+    if (state.tour.lessons.has(node.file)) {
+      node.explainStatus = 'done';
+      render();
+      return;
+    }
+    node.explainStatus = 'generating';
+    render();
+    vscodeApi.postMessage({ type: 'explainFile', file: node.file });
+  });
+  document.getElementById('km-explain-retry')?.addEventListener('click', () => {
+    const node = state.knowledgeMap.node;
+    if (!node) return;
+    node.explainStatus = 'generating';
+    render();
+    vscodeApi.postMessage({ type: 'explainFile', file: node.file });
+  });
+  document.getElementById('km-practice-file')?.addEventListener('click', () => {
+    const node = state.knowledgeMap.node;
+    if (!node) return;
+    node.view = 'practice';
+    node.practiceScenarioIndex = 0;
+    node.practiceSelectedOption = undefined;
+    if (state.knowledgeMap.filePracticePlans.has(node.file)) {
+      node.practiceStatus = 'ready';
+      render();
+      return;
+    }
+    node.practiceStatus = 'generating';
+    render();
+    vscodeApi.postMessage({ type: 'requestFilePractice', file: node.file });
+  });
+  document.getElementById('km-practice-retry')?.addEventListener('click', () => {
+    const node = state.knowledgeMap.node;
+    if (!node) return;
+    node.practiceStatus = 'generating';
+    render();
+    vscodeApi.postMessage({ type: 'requestFilePractice', file: node.file });
+  });
+  document.querySelectorAll<HTMLElement>('.km-scenario-option').forEach((button) => {
+    button.addEventListener('click', () => {
+      const node = state.knowledgeMap.node;
+      const plan = node && state.knowledgeMap.filePracticePlans.get(node.file);
+      const scenario = plan?.scenarios[node!.practiceScenarioIndex];
+      if (!node || !scenario) return;
+
+      const index = Number(button.dataset.index);
+      node.practiceSelectedOption = index;
+      render();
+      vscodeApi.postMessage({
+        type: 'recordPracticeAttempt',
+        file: scenario.correctOption,
+        correct: scenario.options[index] === scenario.correctOption,
+      });
+    });
+  });
+  document.getElementById('km-scenario-continue')?.addEventListener('click', () => {
+    const node = state.knowledgeMap.node;
+    if (!node) return;
+    node.practiceScenarioIndex += 1;
+    node.practiceSelectedOption = undefined;
+    render();
+  });
+
   requestAnimationFrame(() => {
     document.querySelectorAll<HTMLElement>('.bar-fill').forEach((el) => {
       el.style.width = `${el.dataset.target}%`;
@@ -672,11 +1251,17 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
       if (message.file === state.result.startingFiles[state.tour.fileIndex]?.file) {
         state.tour.status = 'generating';
       }
+      if (state.knowledgeMap.node?.file === message.file) {
+        state.knowledgeMap.node.explainStatus = 'generating';
+      }
       break;
     case 'fileLessonResult':
       state.tour.lessons.set(message.file, message.lesson);
       if (message.file === state.result.startingFiles[state.tour.fileIndex]?.file) {
         state.tour.status = 'done';
+      }
+      if (state.knowledgeMap.node?.file === message.file) {
+        state.knowledgeMap.node.explainStatus = 'done';
       }
       break;
     case 'fileLessonError':
@@ -684,6 +1269,49 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
         state.tour.status = 'error';
         state.tour.errorMessage = message.message;
       }
+      if (state.knowledgeMap.node?.file === message.file) {
+        state.knowledgeMap.node.explainStatus = 'error';
+        state.knowledgeMap.node.explainError = message.message;
+      }
+      break;
+    case 'practicePlanGenerating':
+      state.practice.phase = 'generating';
+      break;
+    case 'practicePlanResult':
+      state.practice.plan = message.plan;
+      state.practice.phase = 'ready';
+      state.practice.scenarioIndex = 0;
+      state.practice.selectedOption = undefined;
+      break;
+    case 'practicePlanError':
+      state.practice.phase = 'error';
+      state.practice.errorMessage = message.message;
+      break;
+    case 'filePracticeGenerating':
+      if (state.knowledgeMap.node?.file === message.file) {
+        state.knowledgeMap.node.practiceStatus = 'generating';
+      }
+      break;
+    case 'filePracticeResult':
+      state.knowledgeMap.filePracticePlans.set(message.file, message.plan);
+      if (state.knowledgeMap.node?.file === message.file) {
+        state.knowledgeMap.node.practiceStatus = 'ready';
+        state.knowledgeMap.node.practiceScenarioIndex = 0;
+        state.knowledgeMap.node.practiceSelectedOption = undefined;
+      }
+      break;
+    case 'filePracticeError':
+      if (state.knowledgeMap.node?.file === message.file) {
+        state.knowledgeMap.node.practiceStatus = 'error';
+        state.knowledgeMap.node.practiceError = message.message;
+      }
+      break;
+    case 'learningProgress':
+      state.learningProgress = {
+        explained: new Set(message.explained),
+        practiced: new Set(message.practiced),
+        mastered: new Set(message.mastered),
+      };
       break;
   }
 

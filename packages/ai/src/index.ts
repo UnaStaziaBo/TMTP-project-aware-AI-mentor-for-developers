@@ -1,7 +1,11 @@
 export type { FileLesson, KeyConstruct } from './types/FileLesson.js';
 export type { FileLessonContext } from './types/FileLessonContext.js';
+export type { PracticePlan, PracticeScenario } from './types/PracticePlan.js';
+export type { PracticePlanContext, ScenarioFocus, ScenarioDifficulty, FileSummary } from './types/PracticePlanContext.js';
 export type { AIProvider, AIProviderCredentials, TestConnectionResult } from './providers/AIProvider.js';
 export { OpenAIProvider } from './providers/OpenAIProvider.js';
 export { FILE_LESSON_SYSTEM_PROMPT, buildFileLessonUserPrompt } from './prompts/fileLessonPrompt.js';
+export { PRACTICE_PLAN_SYSTEM_PROMPT, buildPracticePlanUserPrompt } from './prompts/practicePlanPrompt.js';
 export { parseFileLesson } from './validateFileLesson.js';
+export { parsePracticePlan } from './validatePracticePlan.js';
 export { InvalidAIResponseError } from './errors.js';

@@ -2,6 +2,7 @@ import { strict as assert } from 'node:assert';
 import { afterEach, describe, it } from 'node:test';
 import { OpenAIProvider } from '../src/providers/OpenAIProvider.js';
 import type { FileLessonContext } from '../src/types/FileLessonContext.js';
+import type { PracticePlanContext } from '../src/types/PracticePlanContext.js';
 
 const originalFetch = globalThis.fetch;
 
@@ -136,6 +137,62 @@ describe('OpenAIProvider.generateFileLesson', () => {
 
     await assert.rejects(() =>
       new OpenAIProvider().generateFileLesson(fileLessonContext, { apiKey: 'sk-test', model: 'gpt-5.5' }),
+    );
+  });
+});
+
+const practicePlanContext: PracticePlanContext = {
+  files: [
+    { file: 'a.ts', title: 'A', responsibility: 'Does A things.' },
+    { file: 'b.ts', title: 'B', responsibility: 'Does B things.' },
+  ],
+  scenarios: [{ file: 'a.ts', options: ['a.ts', 'b.ts'], difficulty: 'intro' }],
+};
+
+describe('OpenAIProvider.generatePracticePlan', () => {
+  it('sends the deterministic plan and zips the AI text onto it', async () => {
+    let capturedBody: any;
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      assert.equal(url, 'https://api.openai.com/v1/chat/completions');
+      capturedBody = JSON.parse(init!.body as string);
+      return Response.json({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                scenarios: [{ situation: 'Where would you look first?', explanation: 'a.ts because it does A.' }],
+              }),
+            },
+          },
+        ],
+      });
+    }) as typeof fetch;
+
+    const plan = await new OpenAIProvider().generatePracticePlan(practicePlanContext, {
+      apiKey: 'sk-test',
+      model: 'gpt-5.5',
+    });
+
+    assert.equal(plan.scenarios[0]?.correctOption, 'a.ts');
+    assert.equal(plan.scenarios[0]?.situation, 'Where would you look first?');
+    assert.ok(capturedBody.messages[1].content.includes('Does A things.'));
+  });
+
+  it('throws a descriptive error on a non-200 response', async () => {
+    globalThis.fetch = (async () => new Response('rate limited', { status: 429 })) as typeof fetch;
+
+    await assert.rejects(
+      () => new OpenAIProvider().generatePracticePlan(practicePlanContext, { apiKey: 'sk-test', model: 'gpt-5.5' }),
+      /429/,
+    );
+  });
+
+  it('throws if the JSON is missing the scenarios array', async () => {
+    globalThis.fetch = (async () =>
+      Response.json({ choices: [{ message: { content: JSON.stringify({}) } }] })) as typeof fetch;
+
+    await assert.rejects(() =>
+      new OpenAIProvider().generatePracticePlan(practicePlanContext, { apiKey: 'sk-test', model: 'gpt-5.5' }),
     );
   });
 });

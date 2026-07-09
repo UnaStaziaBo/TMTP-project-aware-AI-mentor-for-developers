@@ -7,11 +7,11 @@ results into a themed webview panel with three screens:
 - **Project Overview** — the six pipeline stages, detected languages/
   frameworks/infrastructure/dependencies with confidence and evidence, and a
   file-type breakdown.
-- **🚀 Where Should You Start?** — the ranked `startingFiles` candidates from
+- **Where Should I Start?** — the ranked `startingFiles` candidates from
   the Starting File Discovery stage, each with its confidence, the plain
   deterministic reasons it was recommended, an **Open File** button, and an
   **Explain** button that jumps straight into the Guided Tour at that file.
-- **✨ Guided Tour** — configure an OpenAI API key (stored only in VS Code's
+- **Guided Tour** — configure an OpenAI API key (stored only in VS Code's
   SecretStorage), then step through the same ranked starting files one at a
   time. Each file's lesson is generated on demand via `@tmpt/ai`'s
   `generateFileLesson` and grounded entirely in that file's real content:

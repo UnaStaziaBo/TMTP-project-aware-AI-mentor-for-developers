@@ -11,16 +11,24 @@ import {
   type PipelineStage,
   type ProjectScanResult,
 } from '@tmpt/scanner';
-import { OpenAIProvider, type FileLesson } from '@tmpt/ai';
+import { OpenAIProvider, type FileLesson, type FileSummary, type PracticePlan } from '@tmpt/ai';
 import { getAIConfig, saveAIConfig } from './ai/aiConfig.js';
 import { determinePrimaryLanguage } from './languageProfile.js';
-import { STAGES, type ExtensionMessage, type StageKey, type WebviewMessage } from './protocol.js';
+import { buildScenarioPlan, buildSingleFileScenarioPlan } from './practicePlanner.js';
+import { STAGES, type ExtensionMessage, type FileConfidence, type StageKey, type WebviewMessage } from './protocol.js';
 
 const FILE_LESSON_CACHE_KEY = 'tmtp.ai.fileLessons';
+const PRACTICE_PLAN_CACHE_KEY = 'tmtp.ai.practicePlan';
+const FILE_PRACTICE_CACHE_KEY = 'tmtp.ai.filePractice';
+const LEARNING_PROGRESS_CACHE_KEY = 'tmtp.ai.learningProgress';
 
 let panel: vscode.WebviewPanel | undefined;
 let latestResult: ProjectScanResult | undefined;
 let fileLessonCache = new Map<string, FileLesson>();
+let practicePlanCache: { signature: string; plan: PracticePlan } | undefined;
+let filePracticeCache = new Map<string, PracticePlan>();
+let practicedFiles = new Set<string>();
+let masteredFiles = new Set<string>();
 
 function makeStage(key: StageKey, projectPath: string): PipelineStage {
   switch (key) {
@@ -75,6 +83,15 @@ async function postAIConfigStatus(
     configured: stored !== undefined,
     provider: stored?.config.provider,
     model: stored?.config.model,
+  });
+}
+
+function postLearningProgress(post: (message: ExtensionMessage) => void): void {
+  post({
+    type: 'learningProgress',
+    explained: [...fileLessonCache.keys()],
+    practiced: [...practicedFiles],
+    mastered: [...masteredFiles],
   });
 }
 
@@ -137,8 +154,128 @@ async function handleExplainFile(
     fileLessonCache.set(file, lesson);
     await context.workspaceState.update(FILE_LESSON_CACHE_KEY, Object.fromEntries(fileLessonCache));
     post({ type: 'fileLessonResult', file, lesson, cached: false });
+    postLearningProgress(post);
   } catch (error) {
     post({ type: 'fileLessonError', file, message: error instanceof Error ? error.message : String(error) });
+  }
+}
+
+async function handleRequestFilePractice(
+  context: vscode.ExtensionContext,
+  file: string,
+  post: (message: ExtensionMessage) => void,
+): Promise<void> {
+  if (!latestResult) {
+    post({ type: 'filePracticeError', file, message: 'Run a scan before requesting practice scenarios.' });
+    return;
+  }
+
+  const cached = filePracticeCache.get(file);
+  if (cached) {
+    post({ type: 'filePracticeResult', file, plan: cached, cached: true });
+    return;
+  }
+
+  const stored = await getAIConfig(context);
+  if (!stored) {
+    post({ type: 'filePracticeError', file, message: 'Configure an AI provider first.' });
+    return;
+  }
+
+  post({ type: 'filePracticeGenerating', file });
+
+  try {
+    const allFiles = latestResult.startingFiles.map((candidate) => candidate.file);
+    const files: FileSummary[] = allFiles.map((f) => {
+      const lesson = fileLessonCache.get(f);
+      return { file: f, title: lesson?.title ?? f, responsibility: lesson?.responsibility ?? '' };
+    });
+    const scenarios = buildSingleFileScenarioPlan(file, allFiles);
+    const provider = new OpenAIProvider();
+    const plan = await provider.generatePracticePlan(
+      { files, scenarios },
+      { apiKey: stored.apiKey, model: stored.config.model },
+    );
+
+    filePracticeCache.set(file, plan);
+    await context.workspaceState.update(FILE_PRACTICE_CACHE_KEY, Object.fromEntries(filePracticeCache));
+    post({ type: 'filePracticeResult', file, plan, cached: false });
+  } catch (error) {
+    post({ type: 'filePracticeError', file, message: error instanceof Error ? error.message : String(error) });
+  }
+}
+
+async function handleRecordPracticeAttempt(
+  context: vscode.ExtensionContext,
+  file: string,
+  correct: boolean,
+  post: (message: ExtensionMessage) => void,
+): Promise<void> {
+  practicedFiles.add(file);
+  if (correct) {
+    masteredFiles.add(file);
+  } else {
+    masteredFiles.delete(file);
+  }
+  await context.workspaceState.update(LEARNING_PROGRESS_CACHE_KEY, {
+    practiced: [...practicedFiles],
+    mastered: [...masteredFiles],
+  });
+  postLearningProgress(post);
+}
+
+async function handleSubmitConfidenceProfile(
+  context: vscode.ExtensionContext,
+  ratings: Record<string, FileConfidence>,
+  post: (message: ExtensionMessage) => void,
+): Promise<void> {
+  if (!latestResult) {
+    post({ type: 'practicePlanError', message: 'Run a scan before requesting a practice plan.' });
+    return;
+  }
+
+  // Order deterministically from the scanner's own ranking rather than
+  // trusting object-key order carried over postMessage/JSON.
+  const touredFiles = latestResult.startingFiles
+    .map((candidate) => candidate.file)
+    .filter((file) => Object.prototype.hasOwnProperty.call(ratings, file));
+
+  if (touredFiles.length === 0) {
+    post({ type: 'practicePlanError', message: 'No toured files to build a practice plan from.' });
+    return;
+  }
+
+  const signature = JSON.stringify(touredFiles.map((file) => [file, ratings[file]]));
+  if (practicePlanCache?.signature === signature) {
+    post({ type: 'practicePlanResult', plan: practicePlanCache.plan, cached: true });
+    return;
+  }
+
+  const stored = await getAIConfig(context);
+  if (!stored) {
+    post({ type: 'practicePlanError', message: 'Configure an AI provider first.' });
+    return;
+  }
+
+  post({ type: 'practicePlanGenerating' });
+
+  try {
+    const files: FileSummary[] = touredFiles.map((file) => {
+      const lesson = fileLessonCache.get(file);
+      return { file, title: lesson?.title ?? file, responsibility: lesson?.responsibility ?? '' };
+    });
+    const scenarios = buildScenarioPlan(touredFiles, ratings);
+    const provider = new OpenAIProvider();
+    const plan = await provider.generatePracticePlan(
+      { files, scenarios },
+      { apiKey: stored.apiKey, model: stored.config.model },
+    );
+
+    practicePlanCache = { signature, plan };
+    await context.workspaceState.update(PRACTICE_PLAN_CACHE_KEY, practicePlanCache);
+    post({ type: 'practicePlanResult', plan, cached: false });
+  } catch (error) {
+    post({ type: 'practicePlanError', message: error instanceof Error ? error.message : String(error) });
   }
 }
 
@@ -196,6 +333,7 @@ function openOverviewPanel(context: vscode.ExtensionContext): void {
       case 'rescan':
         startScan();
         void postAIConfigStatus(context, post);
+        postLearningProgress(post);
         break;
       case 'aiTestConnection':
         void new OpenAIProvider()
@@ -213,6 +351,15 @@ function openOverviewPanel(context: vscode.ExtensionContext): void {
       case 'explainFile':
         void handleExplainFile(context, message.file, post);
         break;
+      case 'submitConfidenceProfile':
+        void handleSubmitConfidenceProfile(context, message.ratings, post);
+        break;
+      case 'requestFilePractice':
+        void handleRequestFilePractice(context, message.file, post);
+        break;
+      case 'recordPracticeAttempt':
+        void handleRecordPracticeAttempt(context, message.file, message.correct, post);
+        break;
     }
   });
 
@@ -224,6 +371,14 @@ function openOverviewPanel(context: vscode.ExtensionContext): void {
 export function activate(context: vscode.ExtensionContext): void {
   const storedLessons = context.workspaceState.get<Record<string, FileLesson>>(FILE_LESSON_CACHE_KEY);
   fileLessonCache = new Map(Object.entries(storedLessons ?? {}));
+  practicePlanCache = context.workspaceState.get<{ signature: string; plan: PracticePlan }>(PRACTICE_PLAN_CACHE_KEY);
+  const storedFilePractice = context.workspaceState.get<Record<string, PracticePlan>>(FILE_PRACTICE_CACHE_KEY);
+  filePracticeCache = new Map(Object.entries(storedFilePractice ?? {}));
+  const storedProgress = context.workspaceState.get<{ practiced: string[]; mastered: string[] }>(
+    LEARNING_PROGRESS_CACHE_KEY,
+  );
+  practicedFiles = new Set(storedProgress?.practiced ?? []);
+  masteredFiles = new Set(storedProgress?.mastered ?? []);
 
   context.subscriptions.push(
     vscode.commands.registerCommand('tmtp.showOverview', () => openOverviewPanel(context)),

@@ -1,7 +1,11 @@
 import { FILE_LESSON_SYSTEM_PROMPT, buildFileLessonUserPrompt } from '../prompts/fileLessonPrompt.js';
+import { PRACTICE_PLAN_SYSTEM_PROMPT, buildPracticePlanUserPrompt } from '../prompts/practicePlanPrompt.js';
 import { parseFileLesson } from '../validateFileLesson.js';
+import { parsePracticePlan } from '../validatePracticePlan.js';
 import type { FileLesson } from '../types/FileLesson.js';
 import type { FileLessonContext } from '../types/FileLessonContext.js';
+import type { PracticePlan } from '../types/PracticePlan.js';
+import type { PracticePlanContext } from '../types/PracticePlanContext.js';
 import type { AIProvider, AIProviderCredentials, TestConnectionResult } from './AIProvider.js';
 
 const OPENAI_BASE_URL = 'https://api.openai.com/v1';
@@ -73,5 +77,17 @@ export class OpenAIProvider implements AIProvider {
   async generateFileLesson(context: FileLessonContext, credentials: AIProviderCredentials): Promise<FileLesson> {
     const raw = await this.requestJSON(FILE_LESSON_SYSTEM_PROMPT, buildFileLessonUserPrompt(context), credentials);
     return parseFileLesson(context.file, raw);
+  }
+
+  async generatePracticePlan(
+    context: PracticePlanContext,
+    credentials: AIProviderCredentials,
+  ): Promise<PracticePlan> {
+    const raw = await this.requestJSON(
+      PRACTICE_PLAN_SYSTEM_PROMPT,
+      buildPracticePlanUserPrompt(context),
+      credentials,
+    );
+    return parsePracticePlan(raw, context.scenarios);
   }
 }

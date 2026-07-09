@@ -1,5 +1,5 @@
 import type { ProjectScanResult } from '@tmpt/scanner';
-import type { FileLesson, TestConnectionResult } from '@tmpt/ai';
+import type { FileLesson, PracticePlan, TestConnectionResult } from '@tmpt/ai';
 
 export type StageKey =
   | 'filesystem'
@@ -23,6 +23,9 @@ export const STAGES: StageInfo[] = [
   { key: 'startingFiles', label: 'Starting Files' },
 ];
 
+/** How confident the developer said they feel working with a toured file. */
+export type FileConfidence = 'green' | 'yellow' | 'red';
+
 export type ExtensionMessage =
   | { type: 'scanStarted'; projectName: string }
   | { type: 'stageComplete'; stage: StageKey; elapsedMs: number; result: ProjectScanResult }
@@ -34,7 +37,14 @@ export type ExtensionMessage =
   | { type: 'aiError'; message: string }
   | { type: 'fileLessonGenerating'; file: string }
   | { type: 'fileLessonResult'; file: string; lesson: FileLesson; cached: boolean }
-  | { type: 'fileLessonError'; file: string; message: string };
+  | { type: 'fileLessonError'; file: string; message: string }
+  | { type: 'practicePlanGenerating' }
+  | { type: 'practicePlanResult'; plan: PracticePlan; cached: boolean }
+  | { type: 'practicePlanError'; message: string }
+  | { type: 'filePracticeGenerating'; file: string }
+  | { type: 'filePracticeResult'; file: string; plan: PracticePlan; cached: boolean }
+  | { type: 'filePracticeError'; file: string; message: string }
+  | { type: 'learningProgress'; explained: string[]; practiced: string[]; mastered: string[] };
 
 export type WebviewMessage =
   | { type: 'rescan' }
@@ -42,4 +52,7 @@ export type WebviewMessage =
   | { type: 'aiTestConnection'; apiKey: string; model: string }
   | { type: 'aiSaveConfig'; apiKey: string; model: string }
   | { type: 'openFile'; file: string }
-  | { type: 'explainFile'; file: string };
+  | { type: 'explainFile'; file: string }
+  | { type: 'submitConfidenceProfile'; ratings: Record<string, FileConfidence> }
+  | { type: 'requestFilePractice'; file: string }
+  | { type: 'recordPracticeAttempt'; file: string; correct: boolean };
