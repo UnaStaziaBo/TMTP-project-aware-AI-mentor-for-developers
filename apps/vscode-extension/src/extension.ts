@@ -58,6 +58,7 @@ async function runScan(projectPath: string, post: (message: ExtensionMessage) =>
     infrastructure: [],
     dependencies: [],
     startingFiles: [],
+    projectGraph: { edges: [] },
   };
 
   try {
@@ -224,6 +225,20 @@ async function handleRecordPracticeAttempt(
   postLearningProgress(post);
 }
 
+async function handleMarkFileLearned(
+  context: vscode.ExtensionContext,
+  file: string,
+  post: (message: ExtensionMessage) => void,
+): Promise<void> {
+  practicedFiles.add(file);
+  masteredFiles.add(file);
+  await context.workspaceState.update(LEARNING_PROGRESS_CACHE_KEY, {
+    practiced: [...practicedFiles],
+    mastered: [...masteredFiles],
+  });
+  postLearningProgress(post);
+}
+
 async function handleSubmitConfidenceProfile(
   context: vscode.ExtensionContext,
   ratings: Record<string, FileConfidence>,
@@ -282,6 +297,9 @@ async function handleSubmitConfidenceProfile(
 function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri): string {
   const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'dist', 'media', 'main.js'));
   const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'styles.css'));
+  const reactFlowStyleUri = webview.asWebviewUri(
+    vscode.Uri.joinPath(extensionUri, 'dist', 'media', 'reactflow.css'),
+  );
   const nonce = Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
 
   return `<!doctype html>
@@ -290,6 +308,7 @@ function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri): stri
   <meta charset="UTF-8" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource}; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link href="${reactFlowStyleUri}" rel="stylesheet" />
   <link href="${styleUri}" rel="stylesheet" />
   <title>TMTP: Project Overview</title>
 </head>
@@ -359,6 +378,9 @@ function openOverviewPanel(context: vscode.ExtensionContext): void {
         break;
       case 'recordPracticeAttempt':
         void handleRecordPracticeAttempt(context, message.file, message.correct, post);
+        break;
+      case 'markFileLearned':
+        void handleMarkFileLearned(context, message.file, post);
         break;
     }
   });

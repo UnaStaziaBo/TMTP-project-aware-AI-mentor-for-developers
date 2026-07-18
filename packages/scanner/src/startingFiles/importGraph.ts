@@ -7,9 +7,15 @@ const PY_RELATIVE_IMPORT_PATTERN = /^\s*from\s+(\.+)([\w.]*)\s+import\b/gm;
 const PY_FROM_IMPORT_PATTERN = /^\s*from\s+([a-zA-Z_][\w.]*)\s+import\b/gm;
 const PY_IMPORT_PATTERN = /^\s*import\s+([a-zA-Z_][\w.]*)/gm;
 
+export interface ImportGraphEdge {
+  from: string;
+  to: string;
+}
+
 export interface ImportGraphResult {
   localImportCounts: Map<string, number>;
   referencedByCounts: Map<string, number>;
+  edges: ImportGraphEdge[];
 }
 
 function dirname(relativePath: string): string {
@@ -155,9 +161,12 @@ function extractPyImportTargets(
 }
 
 /**
- * Builds a lightweight local (project-relative) import graph purely to feed the
- * starting-file scoring rules. Each candidate file's content is read once by the
- * caller and reused here for both extraction and resolution.
+ * Builds a lightweight local (project-relative) import graph: feeds the
+ * starting-file scoring rules (via the count maps) and the deterministic
+ * Project Graph (via `edges`) from the same single pass — never invented,
+ * only relationships this resolver could actually verify. Each candidate
+ * file's content is read once by the caller and reused here for both
+ * extraction and resolution.
  */
 export function buildImportGraph(
   candidateContents: Map<string, string>,
@@ -167,6 +176,7 @@ export function buildImportGraph(
   const basenameIndex = buildPythonBasenameIndex(knownFiles);
   const localImportCounts = new Map<string, number>();
   const referencedByCounts = new Map<string, number>();
+  const edges: ImportGraphEdge[] = [];
 
   for (const [relativePath, content] of candidateContents) {
     let resolved: Set<string>;
@@ -187,8 +197,9 @@ export function buildImportGraph(
     localImportCounts.set(relativePath, resolved.size);
     for (const target of resolved) {
       referencedByCounts.set(target, (referencedByCounts.get(target) ?? 0) + 1);
+      edges.push({ from: relativePath, to: target });
     }
   }
 
-  return { localImportCounts, referencedByCounts };
+  return { localImportCounts, referencedByCounts, edges };
 }

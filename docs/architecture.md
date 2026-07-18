@@ -27,7 +27,24 @@ The packages directory contains the core architecture of TMTP.
 
 ### scanner
 
-The scanner package is the first foundational package and is intended to own project discovery and technology detection. At the current stage, it contains a minimal scaffold and does not yet implement scanning behavior.
+The scanner package owns project discovery and technology detection through a
+deterministic pipeline (filesystem → language → framework → infrastructure →
+dependency → starting-file discovery). Each stage enriches the same
+`ProjectScanResult` object; no stage depends on AI. The starting-file stage's
+import resolver also produces `projectGraph.edges` — a deterministic, verified
+set of local import relationships between files, used to visualize the
+project as an explorable graph rather than a flat list.
+
+### ai
+
+The ai package is the first (and, so far, only) package that talks to an AI
+provider. It depends on scanner's *types* only — the dependency is strictly
+one-directional, and the scanner has no knowledge that this package exists.
+Its job is narrow: generate a lesson or a practice scenario from a
+deterministic context the caller assembled, and validate/shape the response
+that comes back. It never decides which files exist, which concepts a
+language has, or which files to recommend — those all come from the
+deterministic packages and callers.
 
 ### shared
 
@@ -51,6 +68,15 @@ This is important for three reasons:
 
 In other words, the architecture is being designed to support AI-enhanced experiences in the future without making AI the foundation of the product.
 
+This has held up in practice: the `ai` package now exists and generates real
+lessons and practice scenarios, but the scanner still has zero knowledge of
+it, and every AI generation is handed a context object built entirely from
+data the deterministic pipeline already produced (file content, detected
+language, starting-file scores and reasons). The Interactive Project Graph is
+a further example — the graph itself (which files, which relationships, how
+important each one is) is 100% deterministic scanner output; AI is not
+involved in deciding what the graph looks like at all.
+
 ## Dependency flow between packages
 
 The current dependency flow is intentionally simple:
@@ -65,13 +91,23 @@ The system is designed to avoid circular dependencies and to keep package bounda
 
 The current layout is a starting point for a larger system. Planned package responsibilities may include:
 
-- scanner: detect technologies and inspect project structure
-- graph: represent project relationships and dependencies
+- scanner: detect technologies and inspect project structure ✅ implemented
+- ai: generate lessons and practice content from deterministic context ✅ implemented
+- graph: represent project relationships and dependencies — delivered
+  differently than originally planned here. Rather than a standalone package,
+  the deterministic edges live directly in the scanner (reusing its existing
+  import resolver at zero extra cost) and the visualization lives in the
+  extension (React Flow, isolated to one screen). A standalone package may
+  still make sense if relationship types grow beyond simple imports (e.g. a
+  real call graph or execution flow), but there was no reason to introduce one
+  before that need existed.
 - concepts: identify concepts and usage patterns
 - profile: model developer behavior and interests
 - gap-engine: identify missing knowledge or skill gaps
 - recommendations: suggest learning content and next steps
 - explain: explain project structure and concepts in context
-- progress: track learning progression over time
+- progress: track learning progression over time — partially exists today as
+  simple per-file learning status (explained/practiced/mastered), not yet a
+  dedicated package.
 
-These packages are planned directions rather than implemented modules.
+The unimplemented items above are still planned directions, not implemented modules.

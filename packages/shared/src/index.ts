@@ -14,5 +14,6 @@ export async function scanProject(
     infrastructure: [],
     dependencies: [],
     startingFiles: [],
+    projectGraph: { edges: [] },
   };
 }

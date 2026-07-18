@@ -1,14 +1,30 @@
+import { createElement } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
 import type { ProjectScanResult } from '@tmpt/scanner';
 import type { FileLesson, PracticePlan } from '@tmpt/ai';
-import { buildKnowledgeMapAreas, type KnowledgeMapArea, type KnowledgeMapNode } from '../knowledgeMap.js';
+import { buildProjectGraphViewModel } from '../projectGraphView.js';
+import { ProjectGraphCanvas } from './graph/ProjectGraphCanvas.js';
 import { STAGES, type ExtensionMessage, type FileConfidence, type StageKey } from '../protocol.js';
 
 declare function acquireVsCodeApi(): { postMessage(message: unknown): void };
 
 const vscodeApi = acquireVsCodeApi();
-const root = document.getElementById('root')!;
+const rootContainer = document.getElementById('root')!;
 
-type Tab = 'overview' | 'startingFiles' | 'guidedTour' | 'knowledgeMap';
+// `render()` below does a full innerHTML rewrite of `appShell` on every state
+// change. The graph canvas is a persistent React root mounted into its own
+// sibling container instead, so pan/zoom/selection survive re-renders that
+// have nothing to do with the graph (e.g. an unrelated tour message arriving
+// while the developer is exploring the graph).
+const appShell = document.createElement('div');
+appShell.id = 'app-shell';
+const graphMount = document.createElement('div');
+graphMount.id = 'graph-mount';
+graphMount.style.display = 'none';
+rootContainer.append(appShell, graphMount);
+let graphRoot: Root | undefined;
+
+type Tab = 'overview' | 'startingFiles' | 'guidedTour' | 'projectGraph';
 
 interface AIConfigState {
   configured: boolean;
@@ -71,7 +87,6 @@ interface KnowledgeMapNodeDetailState {
 }
 
 interface KnowledgeMapState {
-  expandedArea: string | null;
   node?: KnowledgeMapNodeDetailState;
   /** Single-file practice plans, separate from the tour-wide "Day 1 Practice" plan. */
   filePracticePlans: Map<string, PracticePlan>;
@@ -102,6 +117,7 @@ const emptyResult: ProjectScanResult = {
   infrastructure: [],
   dependencies: [],
   startingFiles: [],
+  projectGraph: { edges: [] },
 };
 
 const state: State = {
@@ -128,7 +144,7 @@ const state: State = {
   },
   practice: createInitialPracticeState(),
   learningProgress: { explained: new Set(), practiced: new Set(), mastered: new Set() },
-  knowledgeMap: { expandedArea: null, filePracticePlans: new Map() },
+  knowledgeMap: { filePracticePlans: new Map() },
 };
 
 function learningStatusFor(file: string): { icon: string; label: string } {
@@ -136,7 +152,7 @@ function learningStatusFor(file: string): { icon: string; label: string } {
     return { icon: '⭐', label: 'Mastered' };
   }
   if (state.learningProgress.practiced.has(file)) {
-    return { icon: '🟢', label: 'Practiced' };
+    return { icon: '🟠', label: 'Practiced' };
   }
   if (state.learningProgress.explained.has(file) || state.tour.lessons.has(file)) {
     return { icon: '🟡', label: 'Explained' };
@@ -283,7 +299,7 @@ const TABS: Array<[Tab, string]> = [
   ['overview', 'Project Overview'],
   ['startingFiles', 'Where Should I Start?'],
   ['guidedTour', 'Guided Tour'],
-  ['knowledgeMap', '🗺️ Knowledge Map'],
+  ['projectGraph', '🕸️ Project Graph'],
 ];
 
 function renderTabBar(): string {
@@ -659,40 +675,6 @@ function renderPracticeFlow(): string {
   }
 }
 
-function renderKnowledgeMapNodeCard(node: KnowledgeMapNode): string {
-  const status = learningStatusFor(node.file);
-  const percent = Math.round(node.confidence * 100);
-  return `
-    <button class="km-node km-node-${node.tier}" data-file="${escapeHtml(node.file)}">
-      <div class="km-node-top">
-        <span class="km-node-status" title="${escapeHtml(status.label)}">${status.icon}</span>
-        <span class="km-node-title">${escapeHtml(node.title)}</span>
-      </div>
-      <div class="km-node-description">${escapeHtml(node.description)}</div>
-      <div class="km-node-meta">
-        <span class="bar-track"><span class="bar-fill" data-target="${percent}"></span></span>
-        <span class="percent">${percent}%</span>
-      </div>
-    </button>`;
-}
-
-function renderKnowledgeMapAreaCard(area: KnowledgeMapArea): string {
-  const expanded = state.knowledgeMap.expandedArea === area.area;
-  return `
-    <div class="km-area km-area-${area.tier}">
-      <button class="km-area-header" data-area="${escapeHtml(area.area)}">
-        <span class="km-area-chevron">${expanded ? '▾' : '▸'}</span>
-        <span class="km-area-name">${escapeHtml(area.area)}</span>
-        <span class="km-area-count">${area.nodes.length} file${area.nodes.length === 1 ? '' : 's'}</span>
-      </button>
-      ${
-        expanded
-          ? `<div class="km-nodes">${area.nodes.map(renderKnowledgeMapNodeCard).join('')}</div>`
-          : ''
-      }
-    </div>`;
-}
-
 function renderKnowledgeMapExplainView(node: KnowledgeMapNodeDetailState): string {
   if (node.explainStatus === 'error') {
     return `
@@ -790,10 +772,10 @@ function renderKnowledgeMapNodeDetail(node: KnowledgeMapNodeDetailState): string
   const status = learningStatusFor(node.file);
   const heading = `
     <div class="screen-heading">
-      <h2>🗺️ ${escapeHtml(node.file)}</h2>
+      <h2>🕸️ ${escapeHtml(node.file)}</h2>
       <p>${status.icon} ${escapeHtml(status.label)}</p>
     </div>`;
-  const backNav = `<div class="tour-nav"><button class="ai-link-button" id="km-back">← Back to map</button></div>`;
+  const backNav = `<div class="tour-nav"><button class="ai-link-button" id="km-back">← Back to graph</button></div>`;
 
   if (node.view === 'explain') {
     return `${heading}${renderKnowledgeMapExplainView(node)}${backNav}`;
@@ -802,43 +784,19 @@ function renderKnowledgeMapNodeDetail(node: KnowledgeMapNodeDetailState): string
     return `${heading}${renderKnowledgeMapPracticeView(node)}${backNav}`;
   }
 
+  const alreadyMastered = state.learningProgress.mastered.has(node.file);
+
   return `
     ${heading}
     <div class="ai-actions km-node-actions">
       <button class="rescan-button" id="km-open-file">Open File</button>
       <button class="ai-explain-button" id="km-explain-file">Explain this File</button>
       <button class="ai-explain-button" id="km-practice-file">Practice this File</button>
+      <button class="ai-link-button" id="km-mark-learned" ${alreadyMastered ? 'disabled' : ''}>
+        ${alreadyMastered ? '⭐ Mastered' : '⭐ Mark as Learned'}
+      </button>
     </div>
     ${backNav}`;
-}
-
-function renderKnowledgeMapScreen(): string {
-  const candidates = state.result.startingFiles;
-
-  if (candidates.length === 0) {
-    return `
-      <div class="screen-heading">
-        <h2>Project Knowledge Map</h2>
-        <p>Your long-term navigation system</p>
-      </div>
-      <div class="empty-line">No important files detected yet.</div>`;
-  }
-
-  if (state.knowledgeMap.node) {
-    return renderKnowledgeMapNodeDetail(state.knowledgeMap.node);
-  }
-
-  const areas = buildKnowledgeMapAreas(candidates);
-
-  return `
-    <div class="screen-heading">
-      <h2>Project Knowledge Map</h2>
-      <p>What should you learn next?</p>
-    </div>
-    <p class="starting-files-intro">Built entirely from the deterministic scan — no AI. Expand an area to see its files, ranked by importance.</p>
-    <div class="knowledge-map">
-      ${areas.map(renderKnowledgeMapAreaCard).join('')}
-    </div>`;
 }
 
 function renderGuidedTourScreen(): string {
@@ -869,7 +827,8 @@ function renderHeader(): string {
 }
 
 function renderFullPageState(title: string, body: string, showRetry: boolean): void {
-  root.innerHTML = `
+  graphMount.style.display = 'none';
+  appShell.innerHTML = `
     <div class="state-page">
       <h2>${title}</h2>
       <p>${body}</p>
@@ -903,6 +862,38 @@ function goToFile(index: number): void {
   vscodeApi.postMessage({ type: 'explainFile', file });
 }
 
+function selectGraphNode(file: string): void {
+  state.knowledgeMap.node = {
+    file,
+    view: 'menu',
+    explainStatus: 'idle',
+    practiceStatus: 'idle',
+    practiceScenarioIndex: 0,
+  };
+  render();
+}
+
+/**
+ * Mounts (once) and re-renders the React Flow graph canvas into its own
+ * persistent container — never through the vanilla innerHTML rewrite below,
+ * so pan/zoom/search state survives unrelated re-renders.
+ */
+function updateGraphCanvas(): void {
+  if (!graphRoot) {
+    graphRoot = createRoot(graphMount);
+  }
+
+  const model = buildProjectGraphViewModel(state.result, learningStatusFor, { includeAll: true });
+  graphRoot.render(
+    createElement(ProjectGraphCanvas, {
+      nodes: model.nodes,
+      edges: model.edges,
+      selectedFile: state.knowledgeMap.node?.file ?? null,
+      onSelectFile: selectGraphNode,
+    }),
+  );
+}
+
 function render(): void {
   if (state.status === 'no-workspace') {
     renderFullPageState(
@@ -918,21 +909,30 @@ function render(): void {
     return;
   }
 
-  const screen =
-    state.activeTab === 'overview'
-      ? renderOverviewBody()
-      : state.activeTab === 'startingFiles'
-        ? renderStartingFilesScreen()
-        : state.activeTab === 'knowledgeMap'
-          ? renderKnowledgeMapScreen()
-          : renderGuidedTourScreen();
+  const showingGraphCanvas = state.activeTab === 'projectGraph' && !state.knowledgeMap.node;
 
-  root.innerHTML = `
+  if (showingGraphCanvas) {
+    appShell.innerHTML = `${renderHeader()}${renderPipeline()}${renderTabBar()}`;
+    graphMount.style.display = '';
+    updateGraphCanvas();
+  } else {
+    graphMount.style.display = 'none';
+    const screen =
+      state.activeTab === 'overview'
+        ? renderOverviewBody()
+        : state.activeTab === 'startingFiles'
+          ? renderStartingFilesScreen()
+          : state.activeTab === 'projectGraph'
+            ? renderKnowledgeMapNodeDetail(state.knowledgeMap.node!)
+            : renderGuidedTourScreen();
+
+    appShell.innerHTML = `
     ${renderHeader()}
     ${renderPipeline()}
     ${renderTabBar()}
     ${screen}
   `;
+  }
 
   document.getElementById('rescan')?.addEventListener('click', () => {
     vscodeApi.postMessage({ type: 'rescan' });
@@ -942,7 +942,7 @@ function render(): void {
     button.addEventListener('click', () => {
       const tab = button.dataset.tab;
       state.activeTab =
-        tab === 'startingFiles' || tab === 'guidedTour' || tab === 'knowledgeMap' ? tab : 'overview';
+        tab === 'startingFiles' || tab === 'guidedTour' || tab === 'projectGraph' ? tab : 'overview';
       render();
     });
   });
@@ -1096,28 +1096,6 @@ function render(): void {
     render();
   });
 
-  document.querySelectorAll<HTMLElement>('.km-area-header').forEach((button) => {
-    button.addEventListener('click', () => {
-      const area = button.dataset.area;
-      if (!area) return;
-      state.knowledgeMap.expandedArea = state.knowledgeMap.expandedArea === area ? null : area;
-      render();
-    });
-  });
-  document.querySelectorAll<HTMLElement>('.km-node').forEach((button) => {
-    button.addEventListener('click', () => {
-      const file = button.dataset.file;
-      if (!file) return;
-      state.knowledgeMap.node = {
-        file,
-        view: 'menu',
-        explainStatus: 'idle',
-        practiceStatus: 'idle',
-        practiceScenarioIndex: 0,
-      };
-      render();
-    });
-  });
   document.getElementById('km-back')?.addEventListener('click', () => {
     state.knowledgeMap.node = undefined;
     render();
@@ -1126,6 +1104,12 @@ function render(): void {
     const file = state.knowledgeMap.node?.file;
     if (file) {
       vscodeApi.postMessage({ type: 'openFile', file });
+    }
+  });
+  document.getElementById('km-mark-learned')?.addEventListener('click', () => {
+    const file = state.knowledgeMap.node?.file;
+    if (file) {
+      vscodeApi.postMessage({ type: 'markFileLearned', file });
     }
   });
   document.getElementById('km-explain-file')?.addEventListener('click', () => {

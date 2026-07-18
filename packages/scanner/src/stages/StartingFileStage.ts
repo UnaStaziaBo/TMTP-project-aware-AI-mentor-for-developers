@@ -6,9 +6,14 @@ export class StartingFileStage implements PipelineStage {
   constructor(private readonly projectPath: string) {}
 
   async execute(result: ProjectScanResult): Promise<ProjectScanResult> {
+    const { candidates, graphEdges } = await detectStartingFiles(this.projectPath, result);
     return {
       ...result,
-      startingFiles: await detectStartingFiles(this.projectPath, result),
+      startingFiles: candidates,
+      // Reuses the same import-resolution pass Starting File Discovery already
+      // does — zero extra file reads, and never invents a relationship it
+      // couldn't otherwise verify.
+      projectGraph: { edges: graphEdges },
     };
   }
 }

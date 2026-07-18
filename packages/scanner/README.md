@@ -13,6 +13,12 @@ The scanner currently performs:
 - framework detection
 - infrastructure detection
 - dependency detection
+- starting-file discovery (a deterministic, rule-based ranking of which files
+  a developer should read first — see `StartingFileCandidate`)
+- project graph edges (`projectGraph.edges`): the same import resolver that
+  powers starting-file scoring also emits the verified local `from`/`to`
+  import relationships it found, at zero extra cost. Never invented — a
+  project with limited import support just gets a sparser graph.
 
 Each stage enriches the same ProjectScanResult object.
 
@@ -30,6 +36,8 @@ Framework Stage
 Infrastructure Stage
 ↓
 Dependency Stage
+↓
+Starting File Stage (also produces projectGraph.edges)
 ↓
 ProjectScanResult
 ```

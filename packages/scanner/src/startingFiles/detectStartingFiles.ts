@@ -12,6 +12,7 @@ import { OrchestrationFileRule } from './rules/OrchestrationFileRule.js';
 import { SmallFilePenaltyRule } from './rules/SmallFilePenaltyRule.js';
 import type { ProjectScanResult } from '../types/ProjectScanResult.js';
 import type { StartingFileCandidate } from '../types/StartingFileCandidate.js';
+import type { ProjectGraphEdge } from '../types/ProjectGraphEdge.js';
 
 const MAX_CONFIDENCE_SCORE = 100;
 
@@ -30,10 +31,15 @@ function toConfidence(score: number): number {
   return Math.round((clamped / MAX_CONFIDENCE_SCORE) * 100) / 100;
 }
 
+export interface StartingFileDetectionResult {
+  candidates: StartingFileCandidate[];
+  graphEdges: ProjectGraphEdge[];
+}
+
 export async function detectStartingFiles(
   projectPath: string,
   result: ProjectScanResult,
-): Promise<StartingFileCandidate[]> {
+): Promise<StartingFileDetectionResult> {
   const candidatePaths = result.files
     .map((file) => file.path)
     .filter((relativePath) => !shouldExcludeFromStartingFiles(relativePath));
@@ -48,7 +54,7 @@ export async function detectStartingFiles(
   }
 
   const knownFiles = result.files.map((file) => file.path);
-  const { localImportCounts, referencedByCounts } = buildImportGraph(contents, knownFiles);
+  const { localImportCounts, referencedByCounts, edges } = buildImportGraph(contents, knownFiles);
 
   const candidates: StartingFileCandidate[] = [];
 
@@ -69,5 +75,6 @@ export async function detectStartingFiles(
     }
   }
 
-  return candidates.sort((a, b) => b.score - a.score || a.file.localeCompare(b.file));
+  candidates.sort((a, b) => b.score - a.score || a.file.localeCompare(b.file));
+  return { candidates, graphEdges: edges };
 }

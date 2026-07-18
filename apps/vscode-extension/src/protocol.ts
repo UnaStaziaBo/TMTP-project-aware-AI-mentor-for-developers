@@ -55,4 +55,5 @@ export type WebviewMessage =
   | { type: 'explainFile'; file: string }
   | { type: 'submitConfidenceProfile'; ratings: Record<string, FileConfidence> }
   | { type: 'requestFilePractice'; file: string }
-  | { type: 'recordPracticeAttempt'; file: string; correct: boolean };
+  | { type: 'recordPracticeAttempt'; file: string; correct: boolean }
+  | { type: 'markFileLearned'; file: string };

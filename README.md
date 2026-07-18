@@ -4,7 +4,7 @@ Teach Me This Project (TMTP) is a project-aware AI mentor for software developer
 
 Unlike traditional coding assistants that begin from a prompt, TMTP first understands the software project itself. It analyzes the repository structure, technologies, conventions, and dependencies before offering guidance, so learning support is grounded in the actual codebase.
 
-TMTP is an early open-source project with three completed milestones: a deterministic project analysis pipeline, a starting-file discovery engine, and a Guided Project Tour that turns the ranked starting files themselves into the textbook — teaching a project's architecture and its primary language together, one real file at a time.
+TMTP is an early open-source project with four completed milestones: a deterministic project analysis pipeline, a starting-file discovery engine, a Guided Project Tour that turns the ranked starting files themselves into the textbook, and an Interactive Project Graph that replaces the old flat file list with a real, explorable node/edge map of the project — sized and colored by importance, colored by what you've actually learned, and still 100% deterministic in what it shows.
 
 ## Why TMTP exists
 
@@ -12,7 +12,8 @@ Most developer tools provide generic answers without understanding the project c
 
 The long-term vision is to build:
 
-- a Project Graph
+- a Project Graph (the visualization now exists — see Milestone 4 — though a
+  deeper standalone `graph` package with richer relationship types is still future work)
 - a Developer Profile
 - knowledge-gap detection
 - personalized learning recommendations
@@ -110,6 +111,81 @@ lesson on demand — never a batch of invented stops, never a generic example.
     the first time it's generated, so revisiting a file or reopening the panel never
     re-bills the same generation
 
+### Milestone 4: Interactive Project Graph
+
+Replaces the old flat, accordion-style Knowledge Map with a real, explorable node/edge
+graph — the goal is to *see* the project, not browse a list of it. Built with
+[React Flow](https://reactflow.dev) and [ELK.js](https://github.com/kieler/elkjs)
+for layout; this is the first React code in the extension, deliberately contained
+to this one screen — everything else stays the vanilla-DOM architecture it always was.
+(The layout originally used [dagre](https://github.com/dagrejs/dagre); it was replaced
+by ELK's layered algorithm after the first version's layout felt cluttered — see
+"Graph layout redesign" below.)
+
+- ✅ Interactive Project Graph (`packages/scanner`, `apps/vscode-extension`)
+  - **the graph is deterministic, never AI-generated.** The scanner's existing
+    import resolver (already built for Starting File Discovery) now also emits the
+    verified edges it finds while scoring files — zero extra file reads, zero new
+    analysis, and an edge only ever exists if the resolver could actually verify
+    the relationship. A project with only partial import support (or none) just
+    gets a sparser graph, never a padded or invented one.
+  - **node design**: file name, deterministic role/description (reusing the same
+    `deriveShortDescription`/`deriveProjectArea` helpers from the old Knowledge
+    Map), importance score, and live learning status (⚪ not visited / 🟡 explained
+    / 🟠 practiced / ⭐ mastered) — all visible without opening the node.
+  - **visual hierarchy is driven by the same deterministic score**: border weight
+    and color intensity scale with importance, and the layered layout naturally
+    floats heavily-depended-upon files toward the top.
+  - clicking a node opens the *exact same* detail panel Milestone 3 already
+    built — **Open File**, **Explain this File** (the Guided Tour lesson),
+    **Practice this File** (the Day 1 Practice system) are all reused verbatim,
+    plus a new **Mark as Learned** action for explicitly promoting a file to ⭐.
+  - to avoid clutter, orphan files (no importance score and no edges) are hidden
+    by default, with a one-click "Show N more files" toggle and a search box that
+    can find and focus any file, hidden or not
+  - zoom, pan, minimap, and fit-to-screen come from React Flow directly; the
+    canvas is mounted once into its own persistent DOM container rather than
+    torn down on every unrelated re-render, so pan/zoom/search state survives
+    normal use of the rest of the extension
+
+#### Graph layout redesign
+
+The first version's dagre-based layout looked cluttered in practice: nodes
+overlapped, edges crossed through unrelated nodes, and unrelated files got
+pulled into the same tangled mass as the main dependency chain. Root causes:
+
+  - node size varied by importance tier, and a layered layout sizes each rank
+    by its tallest node — one large node next to several small ones wasted a
+    lot of vertical space and threw off consistent spacing.
+  - edges were drawn as a React Flow `smoothstep` curve computed from just the
+    two endpoints, with no awareness of where other nodes actually sat, so a
+    line could easily cut straight through an unrelated node.
+  - dagre's single-pass crossing-minimization is weaker than a true layered
+    (Sugiyama-style) algorithm's, so busier graphs crossed more than necessary.
+  - disconnected files (no import path to anything else) were laid out
+    alongside the main chain instead of set apart, contributing to a
+    "hairball" look as the file count grew.
+  - every node click re-ran `fitView`, so simply selecting a file could
+    recenter/rezoom the camera unexpectedly.
+
+The layout now runs on [ELK.js](https://github.com/kieler/elkjs)'s layered
+algorithm (`elk.algorithm: 'layered'`, strong `LAYER_SWEEP` crossing
+minimization, `BRANDES_KOEPF` node placement) instead of dagre:
+
+  - all nodes are now a single, fixed size — importance shows through border
+    weight and color intensity only, so one rank is never stretched by a
+    single oversized node.
+  - edges are drawn along ELK's real computed route (its `sections`
+    bend points), not a guessed curve, and are smoothed client-side into a
+    curve that still follows that node-avoiding path.
+  - `elk.separateConnectedComponents` clusters disconnected files apart from
+    the main chain instead of interleaving them into one hairball.
+  - selecting a node (click) no longer moves the camera; only explicit
+    navigation — "Fit to Screen" or searching and pressing Enter — does.
+  - the layout is computed asynchronously off ELK, cached per visible node
+    set (not recomputed on every selection), with an "Arranging…" indicator
+    while it runs.
+
 ## Architecture
 
 TMTP uses a deterministic pipeline architecture. Each stage enriches the same project analysis result object.
@@ -137,8 +213,11 @@ This design keeps the analysis reusable, IDE-independent, and easy to extend. Th
 ## Repository structure
 
 - apps/: user-facing applications such as the VS Code extension
+  - vscode-extension/src/webview/graph/: the Interactive Project Graph — the
+    only React code in the repo, isolated to this one screen
 - packages/: reusable core packages
-  - scanner/: the deterministic project analysis engine (no AI dependency)
+  - scanner/: the deterministic project analysis engine (no AI dependency) —
+    now also the source of the deterministic `projectGraph.edges` relationships
   - ai/: the AI provider abstraction, prompt, and response validation — depends
     on scanner's types only, never the reverse
   - shared/: shared contracts and utilities
@@ -159,14 +238,19 @@ Current projects include:
 
 ## Testing
 
-The scanner includes integration tests for each golden project; the ai package
-has unit tests for `FileLesson` response validation and the OpenAI provider
-(against a mocked network layer — no real API key needed).
+The scanner includes integration tests for each golden project (including the
+deterministic project-graph edges); the ai package has unit tests for `FileLesson`/
+`PracticePlan` response validation and the OpenAI provider (against a mocked
+network layer — no real API key needed); the vscode-extension package tests the
+graph view-model and layout algorithm directly, plus the actual React Flow
+canvas mounted in a real DOM via jsdom (verifying render, click-to-select, and
+the clutter-filter toggle all actually work, not just that the code compiles).
 
 Current status:
 
-- 123 scanner integration tests
-- 14 ai package tests
+- 128 scanner integration tests
+- 23 ai package tests
+- 20 vscode-extension tests
 - 0 failures
 
 ## Running the project
@@ -190,12 +274,13 @@ pnpm --filter @tmpt/vscode-extension test:integration
   - Frameworks
   - Infrastructure
   - Dependencies
-- ✅ Starting File Discovery Engine (Milestone 2, deterministic — ships ahead of the Project Graph below)
+- ✅ Starting File Discovery Engine (Milestone 2, deterministic)
 - ✅ Guided Project Tour (Milestone 3 — first AI feature and first real teaching experience; per-file lessons grounded in real code, no chat, no quizzes)
+- ✅ Interactive Project Graph (Milestone 4 — deterministic edges from the scanner, React Flow visualization; a large chunk of Level 2 below, though a standalone `graph` package with richer relationship types is still open)
 
 ### Upcoming
 
-- 🔜 Level 2 — Project Graph
+- 🔜 Level 2 — Project Graph (partially delivered — see Milestone 4)
 - 🔜 Level 3 — Concept Usage
 - 🔜 Level 4 — Developer Profile
 - 🔜 Level 5 — Gap Engine

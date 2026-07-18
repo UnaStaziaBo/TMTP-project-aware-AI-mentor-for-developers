@@ -6,6 +6,11 @@
   box-sizing: border-box;
 }
 
+html,
+body {
+  height: 100%;
+}
+
 body {
   margin: 0;
   padding: 0;
@@ -15,8 +20,18 @@ body {
   background: var(--vscode-editor-background);
 }
 
+/* #root is a flex column so the graph canvas (a flex child, see #graph-mount)
+   can claim exactly the viewport height left over after the header/tab bar,
+   instead of the two being separately positioned and kept in sync by hand. */
 #root {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+#app-shell {
   max-width: 960px;
+  width: 100%;
   margin: 0 auto;
   padding: 32px 24px 64px;
 }
@@ -738,139 +753,148 @@ body {
   border-top: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
 }
 
-/* ---- Project Knowledge Map ---- */
-
-.knowledge-map {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 18px;
-}
-
-.km-area {
-  border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
-  border-radius: 8px;
-  background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
-  overflow: hidden;
-}
-
-.km-area-large { border-left: 4px solid var(--vscode-charts-blue); }
-.km-area-medium { border-left: 4px solid var(--vscode-charts-purple); }
-.km-area-small { border-left: 4px solid var(--vscode-widget-border, var(--vscode-panel-border)); }
-
-.km-area-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  font-family: inherit;
-  font-size: 13.5px;
-  font-weight: 600;
-  color: var(--vscode-foreground);
-  background: transparent;
-  border: none;
-  padding: 14px 16px;
-  cursor: pointer;
-  text-align: left;
-}
-
-.km-area-header:hover {
-  background: var(--vscode-list-hoverBackground);
-}
-
-.km-area-chevron {
-  flex: none;
-  color: var(--vscode-descriptionForeground);
-  font-size: 11px;
-}
-
-.km-area-name {
-  flex: 1;
-}
-
-.km-area-count {
-  font-size: 11px;
-  font-weight: 400;
-  color: var(--vscode-descriptionForeground);
-}
-
-.km-nodes {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 10px;
-  padding: 0 14px 16px;
-}
-
-.km-node {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-family: inherit;
-  text-align: left;
-  color: var(--vscode-foreground);
-  background: var(--vscode-editor-background);
-  border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
-  border-radius: 6px;
-  padding: 12px 14px;
-  cursor: pointer;
-}
-
-.km-node:hover {
-  border-color: var(--vscode-focusBorder);
-}
-
-.km-node-large {
-  padding: 16px 18px;
-}
-
-.km-node-large .km-node-title {
-  font-size: 14.5px;
-}
-
-.km-node-small {
-  padding: 9px 12px;
-  opacity: 0.85;
-}
-
-.km-node-top {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.km-node-status {
-  flex: none;
-  font-size: 12px;
-}
-
-.km-node-title {
-  font-family: var(--vscode-editor-font-family, monospace);
-  font-size: 13px;
-  font-weight: 600;
-  overflow-wrap: break-word;
-}
-
-.km-node-description {
-  font-size: 12px;
-  color: var(--vscode-descriptionForeground);
-}
-
-.km-node-meta {
-  display: grid;
-  grid-template-columns: 1fr 32px;
-  align-items: center;
-  gap: 8px;
-  margin-top: 2px;
-}
-
-.km-node-meta .bar-fill {
-  background: var(--vscode-charts-blue);
-}
+/* ---- Project Knowledge Map (file detail panel, reused by the graph) ---- */
 
 .km-node-actions {
   flex-direction: column;
   align-items: flex-start;
   gap: 10px;
+}
+
+/* ---- Interactive Project Graph ---- */
+
+/* A flex child of #root (see above), not a `position: fixed` overlay: it
+   grows to claim exactly the height #app-shell's header/tab bar don't use,
+   with no JS-measured offset to keep in sync and no risk of a positioned
+   element painting over its non-positioned sibling. */
+#graph-mount {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+  background: var(--vscode-editor-background);
+}
+
+/* React Flow sets `position: relative; width/height: 100%` as an INLINE
+   style on this element, so a plain CSS rule can't override it — hence
+   `!important` here. Forcing `position: absolute; inset: 0` (rather than
+   leaving its percentage height) matters for a different reason: a flex
+   item's flex-grow-derived height is not treated as a definite size for a
+   plain in-flow child's `height: 100%` to resolve against (verified via a
+   real headless-Chrome render: #graph-mount measured a correct 456px while
+   its `height: 100%` child still measured 0px) — but it IS treated as
+   definite for an absolutely-positioned descendant's containing block, so
+   inset-based sizing avoids the quirk entirely. */
+#graph-mount .react-flow {
+  position: absolute !important;
+  inset: 0 !important;
+}
+
+.graph-node {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1.5px solid var(--vscode-widget-border, var(--vscode-panel-border));
+  background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+}
+
+.graph-node:hover {
+  border-color: var(--vscode-focusBorder);
+}
+
+.graph-node-large {
+  border-width: 2.5px;
+  border-color: var(--vscode-charts-blue);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.graph-node-large .graph-node-title {
+  font-size: 14.5px;
+}
+
+.graph-node-medium {
+  border-color: var(--vscode-charts-purple);
+}
+
+.graph-node-small {
+  opacity: 0.8;
+}
+
+.graph-node-selected {
+  border-color: var(--vscode-focusBorder);
+  box-shadow: 0 0 0 2px var(--vscode-focusBorder);
+}
+
+.graph-node-dimmed {
+  opacity: 0.25;
+}
+
+.graph-node-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.graph-node-status {
+  flex: none;
+  font-size: 12px;
+}
+
+.graph-node-title {
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.graph-node-description {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.graph-node-meta {
+  display: grid;
+  grid-template-columns: 1fr 30px;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.graph-node-meta .bar-fill {
+  background: var(--vscode-charts-blue);
+}
+
+.graph-search-panel,
+.graph-toggle-panel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
+  border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+
+.graph-search-input {
+  width: 200px;
+}
+
+.graph-search-count {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  white-space: nowrap;
 }
 
 /* ---- Sections ---- */

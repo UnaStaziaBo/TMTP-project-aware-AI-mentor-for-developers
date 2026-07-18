@@ -17,6 +17,7 @@ export async function scanProject(projectPath: string): Promise<ProjectScanResul
     infrastructure: [],
     dependencies: [],
     startingFiles: [],
+    projectGraph: { edges: [] },
   };
 
   const pipeline = new Pipeline([
