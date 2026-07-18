@@ -48,6 +48,8 @@ ProjectScanResult
 - Python
 - TypeScript
 - Java
+- Go
+- Rust
 
 ### Frameworks
 - FastAPI
@@ -73,6 +75,34 @@ ProjectScanResult
 - JWT
 - Django REST Framework
 - Spring Security
+- FastAPI
+- Prisma
+- Redux
+- Jest
+- Vitest
+- Zod
+- Alembic
+
+## Graph contract
+
+`projectGraph.edges` contains only verified local import relationships:
+
+```ts
+interface ProjectGraphEdge {
+  from: string; // importing source file
+  to: string;   // imported local file
+}
+```
+
+The scanner does not create pedagogical or inferred architectural edges. The
+VS Code client may derive a separately labelled learning sequence from scores,
+reasons, project areas, and graph degree, but it never writes that sequence
+back into the scanner's code-dependency result.
+
+Import resolution currently covers TypeScript/JavaScript relative imports and
+Python relative or resolvable project-local imports. Unsupported or ambiguous
+relationships are omitted rather than guessed, so the graph may be sparse but
+does not claim evidence it does not have.
 
 ## Usage
 

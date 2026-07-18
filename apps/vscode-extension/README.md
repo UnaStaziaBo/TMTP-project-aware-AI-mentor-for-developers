@@ -30,25 +30,30 @@ results into a themed webview panel with four tabs:
   deterministically-planned multiple-choice scenarios (weighted toward the
   files rated least confident) whose situations and explanations are
   AI-written but whose file/option/order selection is not.
-- **🕸️ Project Graph** — a real, explorable node/edge graph of the project
+- **🕸️ Project Graph** — an explorable code-and-learning graph of the project
   (React Flow + ELK.js), replacing the old flat Knowledge Map list. ELK's
   layered algorithm lays every file out top-to-bottom by dependency direction
   (entry points on top, imports flowing down), minimizes edge crossings, and
   keeps disconnected files clustered separately instead of interleaved into
   one hairball. All nodes share the same size — importance is communicated
   through border weight and color intensity instead, so a dense graph stays
-  readable rather than lopsided. Edges are real, scanner-verified local
-  import relationships — never invented — and are drawn along ELK's actual
-  routed path (not a straight guess between two points), so a line never cuts
-  through an unrelated node. Node color also reflects live learning status
+  readable rather than lopsided. Solid edges are real, scanner-verified local
+  import relationships — never invented — while green dashed edges are an
+  explicitly labelled deterministic recommended lesson sequence. Both use
+  ELK's routed paths rather than straight endpoint guesses. Every core node
+  shows its learning step and scanner-derived reason for being useful. Its
+  status icon also reflects live learning progress
   (⚪ not visited / 🟡 explained / 🟠 practiced / ⭐ mastered), which updates
   automatically as you use the Guided Tour and Practice. Clicking a node just
   selects it and opens the same detail panel as before — **Open File**,
   **Explain this File**, **Practice this File**, **Mark as Learned** —
-  without moving the camera; **Fit to Screen** and searching are the only
-  actions that reposition the view. Orphan files (no score, no edges) are
-  hidden by default to avoid clutter, with a toggle to reveal them and a
-  search box to find and focus any file.
+  without moving the camera; **Fit to Screen** and search provide explicit
+  navigation. The graph opens in **Core** scope, **Related** adds one-hop
+  neighbours, and **All files** reveals the full scan. Generated TypeScript
+  sidecars, source maps, tests, examples, and build output do not lead the
+  Core view but remain inspectable in All files. Hovering a node highlights
+  outgoing “uses” imports in orange and incoming “used by” imports in blue.
+  A permanent legend distinguishes code dependencies from teaching order.
 
 No chat, no global progress tracking beyond per-file learning status yet —
 that's future milestones. The scanner itself has no AI dependency, and
@@ -80,13 +85,15 @@ To reopen the panel manually, run the `TMTP: Show Project Overview` command.
   importance-tier helpers, originally built for the old Knowledge Map list;
   reused as-is by the graph's node view model.
 - `src/projectGraphView.ts` — builds the graph's deterministic node/edge view
-  model from `ProjectScanResult` (`startingFiles` for importance,
-  `projectGraph.edges` for relationships) plus the caller's learning-status
-  lookup. No AI, no new analysis, no invented edges.
+  model from `ProjectScanResult` (`startingFiles` for importance and teaching
+  rationale, `projectGraph.edges` for verified imports) plus the caller's
+  learning-status lookup. It classifies generated/test/example files as
+  auxiliary for progressive disclosure; they are not deleted from the model.
 - `src/webview/graph/` — the only React code in the extension, isolated to
-  the graph tab: `ProjectGraphCanvas.tsx` (the React Flow canvas: search,
-  clutter filter, minimap, controls, decoupling node selection from camera
-  movement), `FileNode.tsx` (the custom, uniformly-sized node), `layout.ts`
+  the graph tab: `ProjectGraphCanvas.tsx` (Core/Related/All scopes,
+  deterministic lesson order, search, import highlighting, minimap, and
+  controls), `FileNode.tsx` (the uniformly-sized node with learning step and
+  rationale), `layout.ts`
   (deterministic ELK.js layered layout — same input always produces the same
   positions and routes), `RoutedEdge.tsx` (renders ELK's real computed edge
   path instead of a guessed curve), and `edgePath.ts` (smooths ELK's routed

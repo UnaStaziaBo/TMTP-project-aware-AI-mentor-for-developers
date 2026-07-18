@@ -7,7 +7,8 @@ no dependency on this package; the dependency only goes one way.
 ## What it does
 
 - `AIProvider` — the interface future providers implement (`testConnection`,
-  `generateFileLesson`). `OpenAIProvider` is the first implementation.
+  `generateFileLesson`, `generatePracticePlan`). `OpenAIProvider` is the first
+  implementation.
 - `generateFileLesson` — given a `FileLessonContext` (a single file's path,
   full real content, detected language, and the scanner's deterministic
   reasons for flagging it as a starting point), produces a `FileLesson`: a
@@ -20,14 +21,21 @@ no dependency on this package; the dependency only goes one way.
   throwing `InvalidAIResponseError` on a fundamentally malformed response
   (missing title/responsibility, or a key construct missing one of its three
   explanations).
+- `generatePracticePlan` — fills deterministic scenario slots prepared by the
+  caller. Each slot already specifies the focus file, available file options,
+  and difficulty; the AI writes the situation and explanation but cannot
+  substitute invented files or change the planned learning emphasis.
+- `parsePracticePlan` — validates scenario count, options, correct answers, and
+  explanatory text against the caller's `ScenarioFocus` contracts.
 
 ## What it deliberately doesn't do
 
-No quizzes, no practice exercises, no global progress tracking — this package
-generates one file's lesson at a time, and caching/idempotency is the
-caller's responsibility (see the VS Code extension's `extension.ts`). It
-never decides which files exist or which file to explain next — the caller
-picks the file and passes in its content.
+This package does not scan repositories, choose starting files, create graph
+relationships, decide the recommended learning order, store progress, or own
+caching. Those responsibilities remain deterministic scanner/client concerns.
+It generates grounded lesson text and practice-scenario prose only after the
+caller supplies real files and a constrained plan. Caching/idempotency is the
+caller's responsibility (see the VS Code extension's `extension.ts`).
 
 ## Testing
 

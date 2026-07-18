@@ -4,7 +4,7 @@ Teach Me This Project (TMTP) is a project-aware AI mentor for software developer
 
 Unlike traditional coding assistants that begin from a prompt, TMTP first understands the software project itself. It analyzes the repository structure, technologies, conventions, and dependencies before offering guidance, so learning support is grounded in the actual codebase.
 
-TMTP is an early open-source project with four completed milestones: a deterministic project analysis pipeline, a starting-file discovery engine, a Guided Project Tour that turns the ranked starting files themselves into the textbook, and an Interactive Project Graph that replaces the old flat file list with a real, explorable node/edge map of the project — sized and colored by importance, colored by what you've actually learned, and still 100% deterministic in what it shows.
+TMTP is an early open-source project with four completed milestones: a deterministic project analysis pipeline, a starting-file discovery engine, a Guided Project Tour that turns the ranked starting files themselves into the textbook, and an Interactive Learning Graph. The graph combines scanner-verified imports with an explicitly labelled, deterministic learning sequence, so it answers both “how is this code connected?” and “what should I learn next?” without presenting teaching relationships as code facts.
 
 ## Why TMTP exists
 
@@ -36,6 +36,8 @@ The long-term vision is to build:
   - Python
   - TypeScript
   - Java
+  - Go
+  - Rust
   - evidence-based detection with confidence scores
 
 - ✅ Framework Detection
@@ -62,6 +64,13 @@ The long-term vision is to build:
   - JWT
   - Django REST Framework
   - Spring Security
+  - FastAPI
+  - Prisma
+  - Redux
+  - Jest
+  - Vitest
+  - Zod
+  - Alembic
 
 ### Milestone 2: Starting File Discovery Engine
 
@@ -111,7 +120,7 @@ lesson on demand — never a batch of invented stops, never a generic example.
     the first time it's generated, so revisiting a file or reopening the panel never
     re-bills the same generation
 
-### Milestone 4: Interactive Project Graph
+### Milestone 4: Interactive Learning Graph
 
 Replaces the old flat, accordion-style Knowledge Map with a real, explorable node/edge
 graph — the goal is to *see* the project, not browse a list of it. Built with
@@ -122,17 +131,29 @@ to this one screen — everything else stays the vanilla-DOM architecture it alw
 by ELK's layered algorithm after the first version's layout felt cluttered — see
 "Graph layout redesign" below.)
 
-- ✅ Interactive Project Graph (`packages/scanner`, `apps/vscode-extension`)
+- ✅ Interactive Learning Graph (`packages/scanner`, `apps/vscode-extension`)
   - **the graph is deterministic, never AI-generated.** The scanner's existing
     import resolver (already built for Starting File Discovery) now also emits the
     verified edges it finds while scoring files — zero extra file reads, zero new
     analysis, and an edge only ever exists if the resolver could actually verify
     the relationship. A project with only partial import support (or none) just
     gets a sparser graph, never a padded or invented one.
-  - **node design**: file name, deterministic role/description (reusing the same
+  - **node design**: file name, project area, deterministic role/description (reusing the same
     `deriveShortDescription`/`deriveProjectArea` helpers from the old Knowledge
-    Map), importance score, and live learning status (⚪ not visited / 🟡 explained
-    / 🟠 practiced / ⭐ mastered) — all visible without opening the node.
+    Map), importance score, learning step and rationale, and live learning status
+    (⚪ not visited / 🟡 explained / 🟠 practiced / ⭐ mastered) — all visible
+    without opening the node.
+  - **two relationship types are deliberately separated**: solid arrows are
+    scanner-verified imports (`source → imported file`); green dashed arrows are
+    the deterministic recommended lesson sequence. Learning edges organize the
+    reading experience but are never represented as code dependencies.
+  - **progressive scope**: **Core** opens with a small project backbone,
+    **Related** adds the core files' direct neighbours, and **All files** exposes
+    the complete scan. Search can reveal a matching file outside the current scope.
+  - generated JavaScript beside TypeScript source, declarations, source maps,
+    tests, examples, and build output remain available in **All files** but do not
+    lead the Core view. Core representatives are spread across project areas so
+    one package or demo cannot consume the entire opening graph.
   - **visual hierarchy is driven by the same deterministic score**: border weight
     and color intensity scale with importance, and the layered layout naturally
     floats heavily-depended-upon files toward the top.
@@ -140,9 +161,9 @@ by ELK's layered algorithm after the first version's layout felt cluttered — s
     built — **Open File**, **Explain this File** (the Guided Tour lesson),
     **Practice this File** (the Day 1 Practice system) are all reused verbatim,
     plus a new **Mark as Learned** action for explicitly promoting a file to ⭐.
-  - to avoid clutter, orphan files (no importance score and no edges) are hidden
-    by default, with a one-click "Show N more files" toggle and a search box that
-    can find and focus any file, hidden or not
+  - hovering a node emphasizes outgoing “uses” imports in orange and incoming
+    “used by” imports in blue while fading unrelated imports; the permanent
+    legend explains both import direction and recommended learning order
   - zoom, pan, minimap, and fit-to-screen come from React Flow directly; the
     canvas is mounted once into its own persistent DOM container rather than
     torn down on every unrelated re-render, so pan/zoom/search state survives
@@ -185,6 +206,8 @@ minimization, `BRANDES_KOEPF` node placement) instead of dagre:
   - the layout is computed asynchronously off ELK, cached per visible node
     set (not recomputed on every selection), with an "Arranging…" indicator
     while it runs.
+  - graph mode uses compact project chrome and all remaining editor height, so
+    it stays useful even when VS Code's terminal panel is open.
 
 ## Architecture
 
@@ -276,7 +299,7 @@ pnpm --filter @tmpt/vscode-extension test:integration
   - Dependencies
 - ✅ Starting File Discovery Engine (Milestone 2, deterministic)
 - ✅ Guided Project Tour (Milestone 3 — first AI feature and first real teaching experience; per-file lessons grounded in real code, no chat, no quizzes)
-- ✅ Interactive Project Graph (Milestone 4 — deterministic edges from the scanner, React Flow visualization; a large chunk of Level 2 below, though a standalone `graph` package with richer relationship types is still open)
+- ✅ Interactive Learning Graph (Milestone 4 — verified scanner imports plus a clearly distinguished deterministic learning path, rendered with React Flow; a standalone `graph` package with richer code relationship types is still open)
 
 ### Upcoming
 
