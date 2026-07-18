@@ -17,12 +17,17 @@ export interface GraphNodeView {
   tier: ImportanceTier;
   learningStatus: GraphLearningStatus;
   hasEdge: boolean;
+  /** Tests, examples and generated compiler sidecars stay available in All files, but never lead the teaching view. */
+  isAuxiliary?: boolean;
+  /** Scanner evidence explaining why this file matters as a learning stop. */
+  learningReason?: string;
 }
 
 export interface GraphEdgeView {
   id: string;
   source: string;
   target: string;
+  kind?: 'import' | 'learning';
 }
 
 export interface ProjectGraphViewModel {
@@ -52,6 +57,22 @@ export function buildProjectGraphViewModel(
   options: { includeAll?: boolean } = {},
 ): ProjectGraphViewModel {
   const candidateByFile = new Map(result.startingFiles.map((candidate) => [candidate.file, candidate]));
+  const allFilePaths = new Set(result.files.map((file) => file.path));
+
+  function isAuxiliaryFile(file: string): boolean {
+    const segments = file.split('/');
+    if (segments.some((segment) => ['test', 'tests', '__tests__', 'examples', 'generated', 'dist', 'build'].includes(segment))) {
+      return true;
+    }
+    if (file.endsWith('.map') || file.endsWith('.d.ts')) return true;
+    if (file.endsWith('.js') || file.endsWith('.jsx')) {
+      const stem = file.replace(/\.jsx?$/, '');
+      // A JS file beside its TS source is compiler output, not a second
+      // architectural component. It remains discoverable in All files.
+      if (allFilePaths.has(`${stem}.ts`) || allFilePaths.has(`${stem}.tsx`)) return true;
+    }
+    return false;
+  }
   const filesWithEdges = new Set<string>();
   for (const edge of result.projectGraph.edges) {
     filesWithEdges.add(edge.from);
@@ -71,6 +92,12 @@ export function buildProjectGraphViewModel(
       tier: importanceTier(confidence),
       learningStatus: learningStatusFor(file.path),
       hasEdge: filesWithEdges.has(file.path),
+      isAuxiliary: isAuxiliaryFile(file.path),
+      learningReason:
+        candidate?.reasons[0] ??
+        (filesWithEdges.has(file.path)
+          ? 'Connected to other project source files'
+          : 'Supporting project file'),
     };
   });
 
@@ -81,7 +108,7 @@ export function buildProjectGraphViewModel(
   const visibleFiles = new Set(visibleNodes.map((node) => node.file));
   const edges: GraphEdgeView[] = result.projectGraph.edges
     .filter((edge) => visibleFiles.has(edge.from) && visibleFiles.has(edge.to))
-    .map((edge) => ({ id: `${edge.from}=>${edge.to}`, source: edge.from, target: edge.to }));
+    .map((edge) => ({ id: `${edge.from}=>${edge.to}`, source: edge.from, target: edge.to, kind: 'import' as const }));
 
   return { nodes: visibleNodes, edges, hiddenCount: allNodes.length - visibleNodes.length };
 }

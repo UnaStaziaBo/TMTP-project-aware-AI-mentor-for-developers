@@ -26,8 +26,8 @@ export interface LayoutResult {
 // Mixed sizes were the single biggest cause of the old layout's uneven,
 // gappy look — a layered layout sizes each rank by its tallest node, so one
 // "large" node next to several "small" ones wasted enormous vertical space.
-export const NODE_WIDTH = 200;
-export const NODE_HEIGHT = 84;
+export const NODE_WIDTH = 230;
+export const NODE_HEIGHT = 112;
 
 // Reused across layout calls — constructing it is cheap, but there's no
 // reason to throw it away each time.

@@ -827,6 +827,8 @@ function renderHeader(): string {
 }
 
 function renderFullPageState(title: string, body: string, showRetry: boolean): void {
+  document.body.classList.remove('graph-mode');
+  appShell.classList.remove('graph-mode');
   graphMount.style.display = 'none';
   appShell.innerHTML = `
     <div class="state-page">
@@ -910,6 +912,13 @@ function render(): void {
   }
 
   const showingGraphCanvas = state.activeTab === 'projectGraph' && !state.knowledgeMap.node;
+
+  // The normal screens benefit from the roomy project header and pipeline.
+  // On the graph, however, that chrome can consume about half of a short
+  // editor viewport (particularly when VS Code's panel is open). Compact it
+  // so React Flow receives the viewport rather than only its lower half.
+  document.body.classList.toggle('graph-mode', showingGraphCanvas);
+  appShell.classList.toggle('graph-mode', showingGraphCanvas);
 
   if (showingGraphCanvas) {
     appShell.innerHTML = `${renderHeader()}${renderPipeline()}${renderTabBar()}`;

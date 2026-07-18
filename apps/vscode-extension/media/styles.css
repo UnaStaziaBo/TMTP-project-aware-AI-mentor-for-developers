@@ -29,11 +29,44 @@ body {
   flex-direction: column;
 }
 
+/* The graph is an editor-like workspace rather than a scrolling document.
+   Give its flex container a definite viewport height and keep the page itself
+   from adding a second scrollbar. Other screens retain their normal document
+   flow and can still grow beyond the viewport. */
+body.graph-mode {
+  overflow: hidden;
+}
+
+body.graph-mode #root {
+  height: 100%;
+  min-height: 0;
+}
+
 #app-shell {
   max-width: 960px;
   width: 100%;
   margin: 0 auto;
   padding: 32px 24px 64px;
+}
+
+/* Keep navigation available in graph mode, but remove the completed scan
+   strip and the large presentation spacing that otherwise take roughly half
+   of a short VS Code editor. */
+#app-shell.graph-mode {
+  flex: none;
+  padding: 14px 24px 0;
+}
+
+#app-shell.graph-mode .header {
+  margin-bottom: 8px;
+}
+
+#app-shell.graph-mode .pipeline {
+  display: none;
+}
+
+#app-shell.graph-mode .tab-bar {
+  margin-bottom: 0;
 }
 
 /* ---- Header ---- */
@@ -864,6 +897,36 @@ body {
   white-space: nowrap;
 }
 
+.graph-node-area {
+  font-size: 9px;
+  line-height: 1;
+  color: var(--vscode-charts-blue);
+  text-transform: uppercase;
+  letter-spacing: 0.45px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.graph-learning-step {
+  margin-left: auto;
+  flex: none;
+  padding: 2px 5px;
+  border-radius: 8px;
+  color: var(--vscode-charts-green);
+  background: color-mix(in srgb, var(--vscode-charts-green) 12%, transparent);
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.graph-learning-reason {
+  font-size: 9.5px;
+  color: var(--vscode-descriptionForeground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .graph-node-meta {
   display: grid;
   grid-template-columns: 1fr 30px;
@@ -877,7 +940,8 @@ body {
 }
 
 .graph-search-panel,
-.graph-toggle-panel {
+.graph-toggle-panel,
+.graph-legend-panel {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -885,6 +949,56 @@ body {
   border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
   border-radius: 6px;
   padding: 6px 10px;
+}
+
+.graph-scope-label {
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.graph-scope-button {
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 4px 7px;
+  color: var(--vscode-descriptionForeground);
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.graph-scope-button:hover {
+  color: var(--vscode-foreground);
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+.graph-scope-button.active {
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
+}
+
+.graph-legend-panel {
+  gap: 8px;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.graph-legend-panel strong {
+  color: var(--vscode-foreground);
+}
+
+.graph-legend-outgoing {
+  color: var(--vscode-charts-orange);
+}
+
+.graph-legend-incoming {
+  color: var(--vscode-charts-blue);
+}
+
+.graph-legend-learning {
+  color: var(--vscode-charts-green);
 }
 
 .graph-search-input {

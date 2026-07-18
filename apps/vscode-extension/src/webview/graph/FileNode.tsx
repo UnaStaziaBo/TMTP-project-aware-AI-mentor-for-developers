@@ -4,11 +4,14 @@ import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
 export interface FileNodeData extends Record<string, unknown> {
   file: string;
   title: string;
+  area: string;
   description: string;
   confidence: number;
   tier: 'large' | 'medium' | 'small';
   learningStatus: { icon: string; label: string };
   dimmed: boolean;
+  learningStep?: number;
+  learningReason: string;
 }
 
 export type FileFlowNode = Node<FileNodeData, 'file'>;
@@ -33,8 +36,11 @@ export function FileNode({ data, selected }: NodeProps<FileFlowNode>) {
           {data.learningStatus.icon}
         </span>
         <span className="graph-node-title">{data.title}</span>
+        {data.learningStep ? <span className="graph-learning-step">Step {data.learningStep}</span> : null}
       </div>
+      <div className="graph-node-area">{data.area}</div>
       <div className="graph-node-description">{data.description}</div>
+      {data.learningStep ? <div className="graph-learning-reason">{data.learningReason}</div> : null}
       {percent > 0 ? (
         <div className="graph-node-meta">
           <span className="bar-track">

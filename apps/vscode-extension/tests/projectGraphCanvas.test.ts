@@ -154,7 +154,7 @@ describe('ProjectGraphCanvas (real DOM via jsdom)', () => {
     });
   });
 
-  it('hides orphan (no score, no edge) nodes by default but reveals them via "Show more files"', async () => {
+  it('shows only core nodes by default but reveals orphan nodes in the All files view', async () => {
     await withGraphDom(async () => {
       const { createElement } = await import('react');
       const { createRoot } = await import('react-dom/client');
@@ -197,13 +197,13 @@ describe('ProjectGraphCanvas (real DOM via jsdom)', () => {
       assert.ok(titles.includes('main.py'));
       assert.ok(!titles.includes('orphan.py'), 'orphan file should be hidden by default');
 
-      const toggle = [...container.querySelectorAll('button')].find((b) => b.textContent?.includes('Show'));
-      assert.ok(toggle, 'expected a "Show N more files" toggle button');
+      const toggle = [...container.querySelectorAll('button')].find((b) => b.textContent?.includes('All files'));
+      assert.ok(toggle, 'expected an "All files" view button');
       toggle!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
       await tick(150);
 
       titles = [...container.querySelectorAll('.graph-node-title')].map((el) => el.textContent);
-      assert.ok(titles.includes('orphan.py'), 'orphan file should appear after toggling "Show more files"');
+      assert.ok(titles.includes('orphan.py'), 'orphan file should appear in the All files view');
 
       root.unmount();
       await tick(50);
