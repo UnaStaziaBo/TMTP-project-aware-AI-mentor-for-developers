@@ -11,6 +11,24 @@
   "main": "./dist/extension.js",
   "activationEvents": ["onStartupFinished"],
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "tmtp",
+          "title": "TMTP",
+          "icon": "media/tmtp.svg"
+        }
+      ]
+    },
+    "views": {
+      "tmtp": [
+        {
+          "id": "tmtp.home",
+          "name": "Learning Home",
+          "type": "webview"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "tmtp.showOverview",

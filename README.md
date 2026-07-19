@@ -236,6 +236,9 @@ This design keeps the analysis reusable, IDE-independent, and easy to extend. Th
 ## Repository structure
 
 - apps/: user-facing applications such as the VS Code extension
+  - the extension contributes a TMTP Activity Bar icon and compact Learning
+    Home sidebar; the full graph, tour, and practice experience opens in an
+    editor tab only when the developer requests it
   - vscode-extension/src/webview/graph/: the Interactive Project Graph — the
     only React code in the repo, isolated to this one screen
 - packages/: reusable core packages

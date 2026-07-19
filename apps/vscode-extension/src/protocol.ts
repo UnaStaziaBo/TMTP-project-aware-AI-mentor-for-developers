@@ -25,6 +25,7 @@ export const STAGES: StageInfo[] = [
 
 /** How confident the developer said they feel working with a toured file. */
 export type FileConfidence = 'green' | 'yellow' | 'red';
+export type WorkspaceTab = 'overview' | 'startingFiles' | 'guidedTour' | 'projectGraph';
 
 export type ExtensionMessage =
   | { type: 'scanStarted'; projectName: string }
@@ -44,7 +45,8 @@ export type ExtensionMessage =
   | { type: 'filePracticeGenerating'; file: string }
   | { type: 'filePracticeResult'; file: string; plan: PracticePlan; cached: boolean }
   | { type: 'filePracticeError'; file: string; message: string }
-  | { type: 'learningProgress'; explained: string[]; practiced: string[]; mastered: string[] };
+  | { type: 'learningProgress'; explained: string[]; practiced: string[]; mastered: string[] }
+  | { type: 'navigateToTab'; tab: WorkspaceTab };
 
 export type WebviewMessage =
   | { type: 'rescan' }

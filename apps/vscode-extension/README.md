@@ -1,8 +1,11 @@
 # TMTP VS Code Extension
 
-The visual surface for TMTP. On activation, it runs the deterministic
-`@tmpt/scanner` pipeline against the open workspace folder and streams the
-results into a themed webview panel with four tabs:
+The visual surface for TMTP. It contributes a permanent TMTP icon to VS Code's
+Activity Bar instead of interrupting startup with an automatically opened
+editor. Clicking the icon opens a lightweight Learning Home sidebar with
+project status, progress, AI configuration status, and direct navigation. The
+full learning workspace runs the deterministic `@tmpt/scanner` pipeline against
+the open folder and streams results into a themed editor webview with four tabs:
 
 - **Project Overview** — the six pipeline stages, detected languages/
   frameworks/infrastructure/dependencies with confidence and evidence, and a
@@ -61,10 +64,10 @@ neither does the graph.
 
 ## Running it
 
-Open the repo root in VS Code and press F5 (`Run TMTP Extension`). This
-builds the extension and webview bundles and launches an Extension
-Development Host with a workspace folder open, so the overview panel appears
-immediately.
+Open the repo root in VS Code and press F5 (`Run TMTP Extension`). This builds
+the extension and webview bundles and launches an Extension Development Host.
+Click the TMTP icon in the Activity Bar, then choose a destination from the
+Learning Home sidebar. The full workspace opens only when requested.
 
 To reopen the panel manually, run the `TMTP: Show Project Overview` command.
 
@@ -74,6 +77,9 @@ To reopen the panel manually, run the `TMTP: Show Project Overview` command.
   progress to the webview, generates a file's lesson on request (config
   lookup, provider call, caching), and opens a file on request. Never sends
   the API key to the webview.
+- `src/sidebarView.ts` — the Activity Bar Learning Home: project/scan status,
+  persisted learning counts, AI status, and navigation into a selected full
+  workspace tab. It intentionally keeps the graph and lessons in the editor.
 - `src/ai/aiConfig.ts` — reads/writes the AI provider config: the API key goes
   only into `context.secrets`; the non-secret provider/model choice goes into
   `context.globalState` (never `settings.json`).

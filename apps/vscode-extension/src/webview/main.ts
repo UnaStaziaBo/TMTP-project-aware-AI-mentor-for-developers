@@ -4,7 +4,7 @@ import type { ProjectScanResult } from '@tmpt/scanner';
 import type { FileLesson, PracticePlan } from '@tmpt/ai';
 import { buildProjectGraphViewModel } from '../projectGraphView.js';
 import { ProjectGraphCanvas } from './graph/ProjectGraphCanvas.js';
-import { STAGES, type ExtensionMessage, type FileConfidence, type StageKey } from '../protocol.js';
+import { STAGES, type ExtensionMessage, type FileConfidence, type StageKey, type WorkspaceTab } from '../protocol.js';
 
 declare function acquireVsCodeApi(): { postMessage(message: unknown): void };
 
@@ -24,7 +24,7 @@ graphMount.style.display = 'none';
 rootContainer.append(appShell, graphMount);
 let graphRoot: Root | undefined;
 
-type Tab = 'overview' | 'startingFiles' | 'guidedTour' | 'projectGraph';
+type Tab = WorkspaceTab;
 
 interface AIConfigState {
   configured: boolean;
@@ -1305,6 +1305,10 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
         practiced: new Set(message.practiced),
         mastered: new Set(message.mastered),
       };
+      break;
+    case 'navigateToTab':
+      state.activeTab = message.tab;
+      state.knowledgeMap.node = undefined;
       break;
   }
 

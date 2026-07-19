@@ -15,7 +15,8 @@ import { OpenAIProvider, type FileLesson, type FileSummary, type PracticePlan } 
 import { getAIConfig, saveAIConfig } from './ai/aiConfig.js';
 import { determinePrimaryLanguage } from './languageProfile.js';
 import { buildScenarioPlan, buildSingleFileScenarioPlan } from './practicePlanner.js';
-import { STAGES, type ExtensionMessage, type FileConfidence, type StageKey, type WebviewMessage } from './protocol.js';
+import { TmtpSidebarProvider, type SidebarSnapshot } from './sidebarView.js';
+import { STAGES, type ExtensionMessage, type FileConfidence, type StageKey, type WebviewMessage, type WorkspaceTab } from './protocol.js';
 
 const FILE_LESSON_CACHE_KEY = 'tmtp.ai.fileLessons';
 const PRACTICE_PLAN_CACHE_KEY = 'tmtp.ai.practicePlan';
@@ -29,6 +30,26 @@ let practicePlanCache: { signature: string; plan: PracticePlan } | undefined;
 let filePracticeCache = new Map<string, PracticePlan>();
 let practicedFiles = new Set<string>();
 let masteredFiles = new Set<string>();
+let sidebarProvider: TmtpSidebarProvider | undefined;
+let activeContext: vscode.ExtensionContext | undefined;
+let requestedTab: WorkspaceTab = 'overview';
+
+async function refreshSidebar(): Promise<void> {
+  if (!sidebarProvider || !activeContext) return;
+  const folder = vscode.workspace.workspaceFolders?.[0];
+  const aiConfigured = (await getAIConfig(activeContext)) !== undefined;
+  const snapshot: SidebarSnapshot = {
+    projectName: folder?.name ?? '',
+    scanned: latestResult !== undefined,
+    fileCount: latestResult?.files.length ?? 0,
+    startingFileCount: latestResult?.startingFiles.length ?? 0,
+    explainedCount: fileLessonCache.size,
+    practicedCount: practicedFiles.size,
+    masteredCount: masteredFiles.size,
+    aiConfigured,
+  };
+  sidebarProvider.update(snapshot);
+}
 
 function makeStage(key: StageKey, projectPath: string): PipelineStage {
   switch (key) {
@@ -69,6 +90,7 @@ async function runScan(projectPath: string, post: (message: ExtensionMessage) =>
     }
     latestResult = result;
     post({ type: 'scanComplete', totalElapsedMs: performance.now() - started });
+    void refreshSidebar();
   } catch (error) {
     post({ type: 'scanError', message: error instanceof Error ? error.message : String(error) });
   }
@@ -94,6 +116,7 @@ function postLearningProgress(post: (message: ExtensionMessage) => void): void {
     practiced: [...practicedFiles],
     mastered: [...masteredFiles],
   });
+  void refreshSidebar();
 }
 
 async function openFile(file: string, post: (message: ExtensionMessage) => void): Promise<void> {
@@ -319,9 +342,11 @@ function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri): stri
 </html>`;
 }
 
-function openOverviewPanel(context: vscode.ExtensionContext): void {
+function openOverviewPanel(context: vscode.ExtensionContext, tab: WorkspaceTab = 'overview'): void {
+  requestedTab = tab;
   if (panel) {
     panel.reveal(vscode.ViewColumn.One);
+    void panel.webview.postMessage({ type: 'navigateToTab', tab } satisfies ExtensionMessage);
     return;
   }
 
@@ -349,6 +374,11 @@ function openOverviewPanel(context: vscode.ExtensionContext): void {
   panel.webview.onDidReceiveMessage((message: WebviewMessage) => {
     switch (message.type) {
       case 'ready':
+        startScan();
+        void postAIConfigStatus(context, post);
+        postLearningProgress(post);
+        post({ type: 'navigateToTab', tab: requestedTab });
+        break;
       case 'rescan':
         startScan();
         void postAIConfigStatus(context, post);
@@ -360,9 +390,10 @@ function openOverviewPanel(context: vscode.ExtensionContext): void {
           .then((result) => post({ type: 'aiTestResult', result }));
         break;
       case 'aiSaveConfig':
-        void saveAIConfig(context, 'openai', message.model, message.apiKey).then(() =>
-          postAIConfigStatus(context, post),
-        );
+        void saveAIConfig(context, 'openai', message.model, message.apiKey).then(() => {
+          void postAIConfigStatus(context, post);
+          void refreshSidebar();
+        });
         break;
       case 'openFile':
         void openFile(message.file, post);
@@ -391,6 +422,7 @@ function openOverviewPanel(context: vscode.ExtensionContext): void {
 }
 
 export function activate(context: vscode.ExtensionContext): void {
+  activeContext = context;
   const storedLessons = context.workspaceState.get<Record<string, FileLesson>>(FILE_LESSON_CACHE_KEY);
   fileLessonCache = new Map(Object.entries(storedLessons ?? {}));
   practicePlanCache = context.workspaceState.get<{ signature: string; plan: PracticePlan }>(PRACTICE_PLAN_CACHE_KEY);
@@ -402,11 +434,25 @@ export function activate(context: vscode.ExtensionContext): void {
   practicedFiles = new Set(storedProgress?.practiced ?? []);
   masteredFiles = new Set(storedProgress?.mastered ?? []);
 
-  context.subscriptions.push(
-    vscode.commands.registerCommand('tmtp.showOverview', () => openOverviewPanel(context)),
+  sidebarProvider = new TmtpSidebarProvider(
+    (tab) => openOverviewPanel(context, tab),
+    {
+      projectName: vscode.workspace.workspaceFolders?.[0]?.name ?? '',
+      scanned: false,
+      fileCount: 0,
+      startingFileCount: 0,
+      explainedCount: fileLessonCache.size,
+      practicedCount: practicedFiles.size,
+      masteredCount: masteredFiles.size,
+      aiConfigured: false,
+    },
   );
 
-  openOverviewPanel(context);
+  context.subscriptions.push(
+    vscode.commands.registerCommand('tmtp.showOverview', () => openOverviewPanel(context)),
+    vscode.window.registerWebviewViewProvider(TmtpSidebarProvider.viewType, sidebarProvider),
+  );
+  void refreshSidebar();
 }
 
 export function deactivate(): void {
