@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Background,
   Controls,
-  MiniMap,
   Panel,
   ReactFlow,
   ReactFlowProvider,
@@ -13,6 +12,7 @@ import {
 import { layoutProjectGraph, type LayoutResult } from './layout.js';
 import { FILE_NODE_TYPES, type FileFlowNode } from './FileNode.js';
 import { ROUTED_EDGE_TYPES, type RoutedEdgeData } from './RoutedEdge.js';
+import { buildSmoothPath } from './edgePath.js';
 import type { GraphEdgeView, GraphNodeView } from '../../projectGraphView.js';
 
 export interface ProjectGraphCanvasProps {
@@ -26,6 +26,50 @@ const EMPTY_LAYOUT: LayoutResult = { nodes: [], edges: [] };
 const FIT_VIEW_OPTIONS = { padding: 0.2, duration: 300 };
 const CORE_FILE_LIMIT = 10;
 type GraphScope = 'core' | 'related' | 'all';
+
+function GraphOverview({ layout, onFit }: { layout: LayoutResult; onFit: () => void }) {
+  if (layout.nodes.length === 0) return null;
+
+  const padding = 100;
+  const minX = Math.min(...layout.nodes.map((node) => node.x)) - padding;
+  const minY = Math.min(...layout.nodes.map((node) => node.y)) - padding;
+  const maxX = Math.max(...layout.nodes.map((node) => node.x + node.width)) + padding;
+  const maxY = Math.max(...layout.nodes.map((node) => node.y + node.height)) + padding;
+
+  return (
+    <Panel position="bottom-right" className="graph-overview-panel">
+      <button className="graph-overview-button" onClick={onFit} title="Fit the project graph to the screen">
+        <span className="graph-overview-label">Project overview</span>
+        <svg
+          className="graph-overview-svg"
+          viewBox={`${minX} ${minY} ${Math.max(1, maxX - minX)} ${Math.max(1, maxY - minY)}`}
+          preserveAspectRatio="xMidYMid meet"
+          role="img"
+          aria-label="Miniature overview of project nodes and relationships"
+        >
+          {layout.edges.map((edge) => (
+            <path
+              key={edge.id}
+              className={edge.id.startsWith('learn:') ? 'graph-overview-edge learning' : 'graph-overview-edge import'}
+              d={buildSmoothPath(edge.points)}
+            />
+          ))}
+          {layout.nodes.map((node) => (
+            <rect
+              key={node.file}
+              className={`graph-overview-node graph-overview-node-${node.tier}`}
+              x={node.x}
+              y={node.y}
+              width={node.width}
+              height={node.height}
+              rx={12}
+            />
+          ))}
+        </svg>
+      </button>
+    </Panel>
+  );
+}
 
 function GraphInner({ nodes, edges, selectedFile, onSelectFile }: ProjectGraphCanvasProps) {
   const [scope, setScope] = useState<GraphScope>('core');
@@ -237,7 +281,7 @@ function GraphInner({ nodes, edges, selectedFile, onSelectFile }: ProjectGraphCa
       proOptions={{ hideAttribution: true }}
     >
       <Background gap={24} />
-      <MiniMap pannable zoomable />
+      <GraphOverview layout={layout} onFit={() => void fitView(FIT_VIEW_OPTIONS)} />
       <Controls showInteractive={false} />
       <Panel position="top-left" className="graph-search-panel">
         <input
