@@ -3,7 +3,8 @@
 The visual surface for TMTP. It contributes a permanent TMTP icon to VS Code's
 Activity Bar instead of interrupting startup with an automatically opened
 editor. Clicking the icon opens a lightweight Learning Home sidebar with
-project status, progress, AI configuration status, and direct navigation. The
+project status, progress, AI configuration status, direct navigation, and a
+**Practice this File** picker over the recommended learning stops. The
 full learning workspace runs the deterministic `@tmpt/scanner` pipeline against
 the open folder and streams results into a themed editor webview with four tabs:
 
@@ -49,6 +50,10 @@ the open folder and streams results into a themed editor webview with four tabs:
   than always making it the answer: correct files rotate across the selected
   file and related choices, and option positions rotate too. The deterministic
   planner fixes those answers before AI writes the scenario prose.
+  **Practice this File** is also persistent in the full workspace toolbar. It
+  targets the selected graph file, current tour file, or first recommended
+  learning stop, in that order. Consequently, a developer can use exercises
+  independently without first completing lessons or navigating through graph details.
   Run `TMTP: Hide AI Commentary` to clear all visible teaching threads.
   The percentage shown on graph nodes is real learning progress rather than
   scanner confidence: 0% unvisited, 10% when explained, up to 60% as Key
@@ -120,7 +125,7 @@ To reopen the panel manually, run the `TMTP: Show Project Overview` command.
   auxiliary for progressive disclosure; they are not deleted from the model.
 - `src/webview/graph/` — the only React code in the extension, isolated to
   the graph tab: `ProjectGraphCanvas.tsx` (Core/Related/All scopes,
-  deterministic lesson order, search, import highlighting, minimap, and
+  deterministic lesson order, search, import highlighting, custom SVG project overview, and
   controls), `FileNode.tsx` (the uniformly-sized node with learning step and
   rationale), `layout.ts`
   (deterministic ELK.js layered layout — same input always produces the same
@@ -129,7 +134,12 @@ To reopen the panel manually, run the `TMTP: Show Project Overview` command.
   polyline into a curve without losing its node-avoiding path).
 - `src/webview/main.ts` — renders the rest of the webview UI (vanilla DOM,
   no React) from the streamed messages, and mounts the graph canvas into a
-  persistent container that survives the rest of the app's re-renders.
+  persistent container that survives the rest of the app's re-renders. It also
+  routes every global or contextual practice action into the same per-file flow.
+- `src/practicePlanner.ts` — deterministically plans confidence-weighted tour
+  practice and focused file practice. Focused plans separate `learningFile`
+  from the slot's correct `file`, rotate answers/options, and preserve the
+  selected file in every option set so exercises test architectural boundaries.
 - `src/protocol.ts` — message types shared between the extension and webview.
 - `scripts/build.mjs` — esbuild bundling for both the extension host
   (CommonJS, Node) and the webview (browser IIFE, with the automatic JSX

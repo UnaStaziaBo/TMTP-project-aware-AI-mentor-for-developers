@@ -22,11 +22,32 @@ no dependency on this package; the dependency only goes one way.
   (missing title/responsibility, or a key construct missing one of its three
   explanations).
 - `generatePracticePlan` — fills deterministic scenario slots prepared by the
-  caller. Each slot already specifies the focus file, available file options,
-  and difficulty; the AI writes the situation and explanation but cannot
-  substitute invented files or change the planned learning emphasis.
+  caller. Each slot specifies `file` (the correct answer), available options,
+  and difficulty. Focused exercises may also specify `learningFile`, the file
+  the developer chose to study; it intentionally does not have to equal the
+  correct answer. The AI writes situation/explanation prose about that file's
+  architectural boundaries but cannot substitute files or change the plan.
 - `parsePracticePlan` — validates scenario count, options, correct answers, and
-  explanatory text against the caller's `ScenarioFocus` contracts.
+  explanatory text against the caller's `ScenarioFocus` contracts. The parser
+  copies options and correct answers from those contracts, never from AI output.
+
+## Practice-plan contract
+
+```ts
+interface ScenarioFocus {
+  learningFile?: string; // file being studied in focused practice
+  file: string;          // correct answer for this scenario
+  options: string[];     // deterministic displayed choices
+  difficulty: 'intro' | 'intermediate' | 'advanced';
+}
+```
+
+For tour-wide practice, `file` is weighted toward files the developer rated
+least confidently. For focused practice, the client rotates `file` across the
+selected learning file and related choices, while retaining `learningFile` as
+the pedagogical subject. The prompt is therefore asked to test ownership,
+delegation, callers, and neighboring responsibilities—not to repeatedly make
+the selected file the obvious answer.
 
 ## What it deliberately doesn't do
 
@@ -40,5 +61,6 @@ caller's responsibility (see the VS Code extension's `extension.ts`).
 ## Testing
 
 Tests are unit-level and don't require a real API key: `OpenAIProvider` is
-tested against a mocked `fetch`, and `parseFileLesson` is tested against both
-well-formed and malformed AI responses.
+tested against a mocked `fetch`; lesson and practice parsers are tested against
+well-formed and malformed responses; and correct answers/options are verified
+to remain controlled by deterministic `ScenarioFocus` input.

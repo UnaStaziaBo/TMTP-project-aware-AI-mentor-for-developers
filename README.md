@@ -125,6 +125,19 @@ lesson on demand — never a batch of invented stops, never a generic example.
   - graph percentages represent actual learning progress (lesson generated →
     constructs read → practiced → mastered), while deterministic scanner
     confidence is retained separately as a node-importance signal
+  - **Practice this File** is available from the Learning Home sidebar, the
+    global workspace toolbar, Guided Tour navigation, graph file details, and
+    native in-editor commentary. Global entry points use the current file when
+    one exists or let the developer choose a recommended file
+  - focused practice contains intro, intermediate, and advanced architectural
+    scenarios. The selected file remains the learning subject, but correct
+    answers rotate deterministically across it and related choices, testing
+    what belongs in the file and what should be delegated elsewhere. Option
+    order rotates too, so neither the selected filename nor a fixed position
+    reveals the answer
+  - the deterministic planner fixes the learning file, correct answer, options,
+    option order, and difficulty before AI writes the situation/explanation;
+    runtime validation restores those fixed fields rather than trusting model output
   - idempotent: each file's lesson is cached (in memory and in `workspaceState`)
     the first time it's generated, so revisiting a file or reopening the panel never
     re-bills the same generation
@@ -173,7 +186,9 @@ by ELK's layered algorithm after the first version's layout felt cluttered — s
   - hovering a node emphasizes outgoing “uses” imports in orange and incoming
     “used by” imports in blue while fading unrelated imports; the permanent
     legend explains both import direction and recommended learning order
-  - zoom, pan, minimap, and fit-to-screen come from React Flow directly; the
+  - zoom, pan, and fit-to-screen come from React Flow; a custom themed SVG
+    overview renders the same ELK nodes and routes in miniature because React
+    Flow's built-in minimap did not render reliably inside the VS Code webview; the
     canvas is mounted once into its own persistent DOM container rather than
     torn down on every unrelated re-render, so pan/zoom/search state survives
     normal use of the rest of the extension
@@ -310,7 +325,9 @@ pnpm --filter @tmpt/vscode-extension test:integration
   - Infrastructure
   - Dependencies
 - ✅ Starting File Discovery Engine (Milestone 2, deterministic)
-- ✅ Guided Project Tour (Milestone 3 — first AI feature and first real teaching experience; per-file lessons grounded in real code, no chat, no quizzes)
+- ✅ Guided Project Tour and Practice (Milestone 3 — grounded per-file lessons,
+  native in-editor commentary, persistent learning progress, and constrained
+  architectural exercises; no general-purpose chat)
 - ✅ Interactive Learning Graph (Milestone 4 — verified scanner imports plus a clearly distinguished deterministic learning path, rendered with React Flow; a standalone `graph` package with richer code relationship types is still open)
 
 ### Upcoming
