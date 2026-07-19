@@ -8,6 +8,9 @@ export type ScenarioDifficulty = 'intro' | 'intermediate' | 'advanced';
  * scenario grounded in files the developer actually toured.
  */
 export interface ScenarioFocus {
+  /** File whose architecture the developer is currently studying. */
+  learningFile?: string;
+  /** Correct answer for this particular scenario; may differ from learningFile. */
   file: string;
   options: string[];
   difficulty: ScenarioDifficulty;

@@ -57,10 +57,16 @@ function difficultyFor(index: number, total: number): ScenarioDifficulty {
  * into tour order so the choices always read top-to-bottom the same way
  * the "Where Should I Start?" list did.
  */
-function buildOptions(focusFile: string, allFiles: readonly string[], optionCount: number): string[] {
+function buildOptions(
+  focusFile: string,
+  allFiles: readonly string[],
+  optionCount: number,
+  requiredFile?: string,
+): string[] {
   const focusIndex = allFiles.indexOf(focusFile);
   const count = Math.min(optionCount, allFiles.length);
   const picked = new Set<string>([focusFile]);
+  if (requiredFile && allFiles.includes(requiredFile)) picked.add(requiredFile);
 
   for (let offset = 1; picked.size < count; offset += 1) {
     picked.add(allFiles[(focusIndex + offset) % allFiles.length]!);
@@ -102,15 +108,28 @@ export function buildScenarioPlan(
 const SINGLE_FILE_DIFFICULTIES: readonly ScenarioDifficulty[] = ['intro', 'intermediate', 'advanced'];
 
 /**
- * Same building blocks as buildScenarioPlan, but every slot centers on one
- * chosen file — used by the Project Knowledge Map's "Practice this File",
- * where the developer picked the file directly instead of it being chosen
- * for them by confidence weighting.
+ * Focused practice still studies one chosen file, but the correct answer is
+ * deliberately rotated across that file and its neighbouring choices. This
+ * tests the chosen file's architectural boundaries instead of teaching the
+ * exploitable rule "always click the file I selected".
  */
 export function buildSingleFileScenarioPlan(file: string, allFiles: readonly string[]): ScenarioFocus[] {
-  return SINGLE_FILE_DIFFICULTIES.map((difficulty) => ({
-    file,
-    options: buildOptions(file, allFiles, OPTION_COUNT_BY_DIFFICULTY[difficulty]),
-    difficulty,
-  }));
+  const uniqueFiles = [...new Set(allFiles)];
+  const selectedIndex = Math.max(0, uniqueFiles.indexOf(file));
+  const answerSequence = SINGLE_FILE_DIFFICULTIES.map(
+    (_, index) => uniqueFiles[(selectedIndex + index) % uniqueFiles.length] ?? file,
+  );
+
+  return SINGLE_FILE_DIFFICULTIES.map((difficulty, index) => {
+    const correctFile = answerSequence[index]!;
+    const options = buildOptions(correctFile, uniqueFiles, OPTION_COUNT_BY_DIFFICULTY[difficulty], file);
+    const rotation = options.length > 0 ? (selectedIndex + index * 2) % options.length : 0;
+    const rotatedOptions = [...options.slice(rotation), ...options.slice(0, rotation)];
+    return {
+      learningFile: file,
+      file: correctFile,
+      options: rotatedOptions,
+      difficulty,
+    };
+  });
 }

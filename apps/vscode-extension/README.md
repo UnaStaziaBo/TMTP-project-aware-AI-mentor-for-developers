@@ -45,6 +45,10 @@ the open folder and streams results into a themed editor webview with four tabs:
   directly to that file's dedicated exercise flow. The same action is present
   alongside the Guided Tour navigation buttons, so practice does not require
   finishing the whole tour or returning to the graph first.
+  Focused practice tests the selected file's architectural boundaries rather
+  than always making it the answer: correct files rotate across the selected
+  file and related choices, and option positions rotate too. The deterministic
+  planner fixes those answers before AI writes the scenario prose.
   Run `TMTP: Hide AI Commentary` to clear all visible teaching threads.
   The percentage shown on graph nodes is real learning progress rather than
   scanner confidence: 0% unvisited, 10% when explained, up to 60% as Key

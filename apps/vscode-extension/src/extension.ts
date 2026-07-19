@@ -20,7 +20,9 @@ import { STAGES, type ExtensionMessage, type FileConfidence, type StageKey, type
 
 const FILE_LESSON_CACHE_KEY = 'tmtp.ai.fileLessons';
 const PRACTICE_PLAN_CACHE_KEY = 'tmtp.ai.practicePlan';
-const FILE_PRACTICE_CACHE_KEY = 'tmtp.ai.filePractice';
+// v2 rotates correct answers in focused practice instead of always making the
+// selected file correct. Do not reuse cached v1 plans with the predictable rule.
+const FILE_PRACTICE_CACHE_KEY = 'tmtp.ai.filePractice.v2';
 const LEARNING_PROGRESS_CACHE_KEY = 'tmtp.ai.learningProgress';
 const COMMENTARY_READ_CACHE_KEY = 'tmtp.ai.commentaryRead';
 
