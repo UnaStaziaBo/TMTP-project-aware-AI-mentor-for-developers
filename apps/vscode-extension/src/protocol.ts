@@ -45,9 +45,16 @@ export type ExtensionMessage =
   | { type: 'filePracticeGenerating'; file: string }
   | { type: 'filePracticeResult'; file: string; plan: PracticePlan; cached: boolean }
   | { type: 'filePracticeError'; file: string; message: string }
-  | { type: 'learningProgress'; explained: string[]; practiced: string[]; mastered: string[] }
+  | {
+      type: 'learningProgress';
+      explained: string[];
+      practiced: string[];
+      mastered: string[];
+      commentary: Record<string, { read: number; total: number }>;
+    }
   | { type: 'navigateToTab'; tab: WorkspaceTab }
-  | { type: 'showAIConfig' };
+  | { type: 'showAIConfig' }
+  | { type: 'startFilePractice'; file: string };
 
 export type WebviewMessage =
   | { type: 'rescan' }

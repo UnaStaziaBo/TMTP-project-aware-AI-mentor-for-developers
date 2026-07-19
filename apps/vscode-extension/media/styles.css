@@ -295,7 +295,8 @@ body.graph-mode #root {
   border-bottom-color: var(--vscode-charts-blue);
 }
 
-.workspace-api-key-button {
+.workspace-api-key-button,
+.workspace-practice-button {
   margin-left: auto;
   align-self: center;
   padding: 5px 8px;
@@ -309,9 +310,24 @@ body.graph-mode #root {
   cursor: pointer;
 }
 
-.workspace-api-key-button:hover {
+.workspace-api-key-button:hover,
+.workspace-practice-button:hover {
   border-color: var(--vscode-widget-border, var(--vscode-panel-border));
   background: var(--vscode-toolbar-hoverBackground);
+}
+
+.workspace-practice-button {
+  margin-left: auto;
+  color: var(--vscode-charts-green);
+}
+
+.workspace-practice-button + .workspace-api-key-button {
+  margin-left: 6px;
+}
+
+.workspace-practice-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 /* ---- Starting files screen ---- */
@@ -1031,7 +1047,7 @@ body.graph-mode #root {
 }
 
 .graph-node-meta .bar-fill {
-  background: var(--vscode-charts-blue);
+  background: var(--vscode-charts-green);
 }
 
 .graph-search-panel,

@@ -223,6 +223,7 @@ function GraphInner({ nodes, edges, selectedFile, onSelectFile }: ProjectGraphCa
           area: node.area,
           description: node.description,
           confidence: node.confidence,
+          learningProgress: node.learningProgress ?? 0,
           tier: node.tier,
           learningStatus: node.learningStatus,
           learningStep: learningStepByFile.get(node.file),

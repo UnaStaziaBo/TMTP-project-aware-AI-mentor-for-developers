@@ -11,7 +11,7 @@ import {
   type PipelineStage,
   type ProjectScanResult,
 } from '@tmpt/scanner';
-import { OpenAIProvider, type FileLesson, type FileSummary, type PracticePlan } from '@tmpt/ai';
+import { OpenAIProvider, type FileLesson, type FileSummary, type KeyConstruct, type PracticePlan } from '@tmpt/ai';
 import { getAIConfig, saveAIConfig } from './ai/aiConfig.js';
 import { determinePrimaryLanguage } from './languageProfile.js';
 import { buildScenarioPlan, buildSingleFileScenarioPlan } from './practicePlanner.js';
@@ -22,6 +22,7 @@ const FILE_LESSON_CACHE_KEY = 'tmtp.ai.fileLessons';
 const PRACTICE_PLAN_CACHE_KEY = 'tmtp.ai.practicePlan';
 const FILE_PRACTICE_CACHE_KEY = 'tmtp.ai.filePractice';
 const LEARNING_PROGRESS_CACHE_KEY = 'tmtp.ai.learningProgress';
+const COMMENTARY_READ_CACHE_KEY = 'tmtp.ai.commentaryRead';
 
 let panel: vscode.WebviewPanel | undefined;
 let latestResult: ProjectScanResult | undefined;
@@ -34,6 +35,132 @@ let sidebarProvider: TmtpSidebarProvider | undefined;
 let activeContext: vscode.ExtensionContext | undefined;
 let requestedTab: WorkspaceTab = 'overview';
 let requestedAIConfig = false;
+let requestedPracticeFile: string | undefined;
+let commentaryController: vscode.CommentController | undefined;
+const commentaryThreads = new Map<string, vscode.CommentThread[]>();
+const commentaryEntries = new Map<string, { thread: vscode.CommentThread; lesson: FileLesson; construct: KeyConstruct; index: number }>();
+let commentaryRead = new Set<string>();
+
+function commentaryReadKey(file: string, construct: KeyConstruct): string {
+  // FNV-1a keeps persisted keys compact while tying read state to the actual
+  // snippet rather than its position in a lesson that may later be reordered.
+  let hash = 0x811c9dc5;
+  for (const char of construct.snippet) {
+    hash ^= char.charCodeAt(0);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `${file}::${(hash >>> 0).toString(16)}`;
+}
+
+function commentaryEntryKey(uri: vscode.Uri, index: number): string {
+  return `${uri.toString()}::${index}`;
+}
+
+function disposeCommentaryForUri(uri: vscode.Uri): void {
+  const key = uri.toString();
+  for (const thread of commentaryThreads.get(key) ?? []) thread.dispose();
+  commentaryThreads.delete(key);
+  for (const entryKey of commentaryEntries.keys()) {
+    if (entryKey.startsWith(`${key}::`)) commentaryEntries.delete(entryKey);
+  }
+}
+
+function clearAllCommentary(): void {
+  for (const threads of commentaryThreads.values()) {
+    for (const thread of threads) thread.dispose();
+  }
+  commentaryThreads.clear();
+  commentaryEntries.clear();
+}
+
+function findConstructRange(document: vscode.TextDocument, construct: KeyConstruct): vscode.Range | undefined {
+  const source = document.getText();
+  const snippet = construct.snippet.trim();
+  let start = source.indexOf(snippet);
+  let length = snippet.length;
+
+  // The prompt requests verbatim snippets, but models occasionally normalize
+  // indentation. A whitespace-tolerant fallback still anchors only the same
+  // ordered source tokens; it does not guess based on semantic similarity.
+  if (start < 0) {
+    const tokens = snippet.split(/\s+/).filter(Boolean);
+    if (tokens.length > 0) {
+      const pattern = tokens.map((token) => token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+');
+      const match = new RegExp(pattern, 'm').exec(source);
+      if (match) {
+        start = match.index;
+        length = match[0].length;
+      }
+    }
+  }
+
+  if (start < 0) return undefined;
+  return new vscode.Range(document.positionAt(start), document.positionAt(start + length));
+}
+
+function lessonComment(lesson: FileLesson, construct: KeyConstruct, index: number, read: boolean): vscode.Comment {
+  const body = new vscode.MarkdownString();
+  body.isTrusted = { enabledCommands: ['tmtp.toggleCommentaryRead', 'tmtp.practiceFile'] };
+  body.supportThemeIcons = true;
+  body.appendMarkdown(`### ${read ? '$(pass-filled) Read' : '$(circle-large-outline) Unread'} · TMTP Step ${index + 1}\n\n`);
+  if (index === 0) {
+    body.appendMarkdown(`**Project context — ${lesson.title}**\n\n${lesson.responsibility}\n\n---\n\n`);
+  }
+  body.appendMarkdown(`📦 **Role in this project**\n\n${construct.project}\n\n`);
+  body.appendMarkdown(`🔷 **Language**\n\n${construct.language}\n\n`);
+  body.appendMarkdown(`🏗 **Why it matters**\n\n${construct.architecture}\n\n---\n\n`);
+  const commandArgs = encodeURIComponent(JSON.stringify([lesson.file, index]));
+  const practiceArgs = encodeURIComponent(JSON.stringify([lesson.file]));
+  body.appendMarkdown(`[${read ? 'Mark as unread' : '✓ Mark as read'}](command:tmtp.toggleCommentaryRead?${commandArgs}) · [$(beaker) Practice this File](command:tmtp.practiceFile?${practiceArgs})`);
+  return {
+    body,
+    mode: vscode.CommentMode.Preview,
+    author: { name: 'TMTP AI Mentor' },
+  };
+}
+
+async function showLessonBesideCode(projectPath: string, lesson: FileLesson): Promise<void> {
+  if (!commentaryController) return;
+  const absolutePath = path.resolve(projectPath, lesson.file);
+  const relative = path.relative(projectPath, absolutePath);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) return;
+
+  const document = await vscode.workspace.openTextDocument(vscode.Uri.file(absolutePath));
+  const editor = await vscode.window.showTextDocument(document, {
+    viewColumn: vscode.ViewColumn.Beside,
+    preview: true,
+    preserveFocus: false,
+  });
+
+  disposeCommentaryForUri(document.uri);
+  const threads: vscode.CommentThread[] = [];
+  lesson.keyConstructs.forEach((construct, index) => {
+    const range = findConstructRange(document, construct);
+    if (!range) return;
+    const isRead = commentaryRead.has(commentaryReadKey(lesson.file, construct));
+    const thread = commentaryController!.createCommentThread(document.uri, range, [lessonComment(lesson, construct, index, isRead)]);
+    thread.label = `${isRead ? '✓ Read' : '○ Unread'} · TMTP ${index + 1}/${lesson.keyConstructs.length}`;
+    thread.canReply = false;
+    thread.collapsibleState = vscode.CommentThreadCollapsibleState.Collapsed;
+    threads.push(thread);
+    commentaryEntries.set(commentaryEntryKey(document.uri, index), { thread, lesson, construct, index });
+  });
+  commentaryThreads.set(document.uri.toString(), threads);
+
+  const firstRange = threads[0]?.range;
+  if (firstRange) {
+    editor.revealRange(firstRange, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+    editor.selection = new vscode.Selection(firstRange.start, firstRange.start);
+  }
+}
+
+function presentLessonBesideCode(projectPath: string, lesson: FileLesson): void {
+  void showLessonBesideCode(projectPath, lesson).catch((error) => {
+    void vscode.window.showWarningMessage(
+      `TMTP generated the lesson, but could not show its in-editor commentary: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  });
+}
 
 async function refreshSidebar(): Promise<void> {
   if (!sidebarProvider || !activeContext) return;
@@ -111,11 +238,19 @@ async function postAIConfigStatus(
 }
 
 function postLearningProgress(post: (message: ExtensionMessage) => void): void {
+  const commentary: Record<string, { read: number; total: number }> = {};
+  for (const [file, lesson] of fileLessonCache) {
+    commentary[file] = {
+      read: lesson.keyConstructs.filter((construct) => commentaryRead.has(commentaryReadKey(file, construct))).length,
+      total: lesson.keyConstructs.length,
+    };
+  }
   post({
     type: 'learningProgress',
     explained: [...fileLessonCache.keys()],
     practiced: [...practicedFiles],
     mastered: [...masteredFiles],
+    commentary,
   });
   void refreshSidebar();
 }
@@ -150,6 +285,7 @@ async function handleExplainFile(
   const cached = fileLessonCache.get(file);
   if (cached) {
     post({ type: 'fileLessonResult', file, lesson: cached, cached: true });
+    presentLessonBesideCode(folder.uri.fsPath, cached);
     return;
   }
 
@@ -180,6 +316,7 @@ async function handleExplainFile(
     await context.workspaceState.update(FILE_LESSON_CACHE_KEY, Object.fromEntries(fileLessonCache));
     post({ type: 'fileLessonResult', file, lesson, cached: false });
     postLearningProgress(post);
+    presentLessonBesideCode(folder.uri.fsPath, lesson);
   } catch (error) {
     post({ type: 'fileLessonError', file, message: error instanceof Error ? error.message : String(error) });
   }
@@ -389,6 +526,10 @@ function openOverviewPanel(
           post({ type: 'showAIConfig' });
           requestedAIConfig = false;
         }
+        if (requestedPracticeFile) {
+          post({ type: 'startFilePractice', file: requestedPracticeFile });
+          requestedPracticeFile = undefined;
+        }
         break;
       case 'rescan':
         startScan();
@@ -432,6 +573,34 @@ function openOverviewPanel(
   });
 }
 
+function openFilePracticeWorkspace(context: vscode.ExtensionContext, file: string): void {
+  if (panel) {
+    panel.reveal(vscode.ViewColumn.One);
+    void panel.webview.postMessage({ type: 'startFilePractice', file } satisfies ExtensionMessage);
+    return;
+  }
+  requestedPracticeFile = file;
+  openOverviewPanel(context, 'projectGraph');
+}
+
+async function choosePracticeFile(context: vscode.ExtensionContext): Promise<void> {
+  const candidates = latestResult?.startingFiles ?? [];
+  if (candidates.length === 0) {
+    openOverviewPanel(context, 'startingFiles');
+    return;
+  }
+  const selected = await vscode.window.showQuickPick(
+    candidates.map((candidate, index) => ({
+      label: `$(beaker) ${candidate.file}`,
+      description: `Learning stop ${index + 1} · importance ${candidate.score}`,
+      detail: candidate.reasons[0],
+      file: candidate.file,
+    })),
+    { title: 'TMTP: Practice this File', placeHolder: 'Choose a file for focused exercises' },
+  );
+  if (selected) openFilePracticeWorkspace(context, selected.file);
+}
+
 export function activate(context: vscode.ExtensionContext): void {
   activeContext = context;
   const storedLessons = context.workspaceState.get<Record<string, FileLesson>>(FILE_LESSON_CACHE_KEY);
@@ -444,10 +613,13 @@ export function activate(context: vscode.ExtensionContext): void {
   );
   practicedFiles = new Set(storedProgress?.practiced ?? []);
   masteredFiles = new Set(storedProgress?.mastered ?? []);
+  commentaryRead = new Set(context.workspaceState.get<string[]>(COMMENTARY_READ_CACHE_KEY) ?? []);
+  commentaryController = vscode.comments.createCommentController('tmtp.aiCommentary', 'TMTP AI Commentary');
 
   sidebarProvider = new TmtpSidebarProvider(
     (tab) => openOverviewPanel(context, tab),
     () => openOverviewPanel(context, 'guidedTour', true),
+    () => void choosePracticeFile(context),
     {
       projectName: vscode.workspace.workspaceFolders?.[0]?.name ?? '',
       scanned: false,
@@ -462,11 +634,31 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     vscode.commands.registerCommand('tmtp.showOverview', () => openOverviewPanel(context)),
+    vscode.commands.registerCommand('tmtp.hideAICommentary', clearAllCommentary),
+    vscode.commands.registerCommand('tmtp.toggleCommentaryRead', async (file: string, index: number) => {
+      const folder = vscode.workspace.workspaceFolders?.[0];
+      if (!folder) return;
+      const uri = vscode.Uri.file(path.resolve(folder.uri.fsPath, file));
+      const entry = commentaryEntries.get(commentaryEntryKey(uri, index));
+      if (!entry) return;
+      const readKey = commentaryReadKey(entry.lesson.file, entry.construct);
+      if (commentaryRead.has(readKey)) commentaryRead.delete(readKey);
+      else commentaryRead.add(readKey);
+      await context.workspaceState.update(COMMENTARY_READ_CACHE_KEY, [...commentaryRead]);
+      const isRead = commentaryRead.has(readKey);
+      entry.thread.label = `${isRead ? '✓ Read' : '○ Unread'} · TMTP ${entry.index + 1}/${entry.lesson.keyConstructs.length}`;
+      entry.thread.comments = [lessonComment(entry.lesson, entry.construct, entry.index, isRead)];
+      postLearningProgress((message) => void panel?.webview.postMessage(message));
+    }),
+    vscode.commands.registerCommand('tmtp.practiceFile', (file: string) => openFilePracticeWorkspace(context, file)),
     vscode.window.registerWebviewViewProvider(TmtpSidebarProvider.viewType, sidebarProvider),
+    vscode.workspace.onDidChangeTextDocument((event) => disposeCommentaryForUri(event.document.uri)),
+    commentaryController,
   );
   void refreshSidebar();
 }
 
 export function deactivate(): void {
+  clearAllCommentary();
   panel?.dispose();
 }

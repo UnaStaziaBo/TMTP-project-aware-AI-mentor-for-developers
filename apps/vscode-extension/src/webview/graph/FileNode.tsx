@@ -7,6 +7,7 @@ export interface FileNodeData extends Record<string, unknown> {
   area: string;
   description: string;
   confidence: number;
+  learningProgress: number;
   tier: 'large' | 'medium' | 'small';
   learningStatus: { icon: string; label: string };
   dimmed: boolean;
@@ -23,7 +24,7 @@ const TIER_CLASS: Record<FileNodeData['tier'], string> = {
 };
 
 export function FileNode({ data, selected }: NodeProps<FileFlowNode>) {
-  const percent = Math.round(data.confidence * 100);
+  const percent = Math.round(data.learningProgress);
 
   return (
     <div
@@ -41,14 +42,12 @@ export function FileNode({ data, selected }: NodeProps<FileFlowNode>) {
       <div className="graph-node-area">{data.area}</div>
       <div className="graph-node-description">{data.description}</div>
       {data.learningStep ? <div className="graph-learning-reason">{data.learningReason}</div> : null}
-      {percent > 0 ? (
-        <div className="graph-node-meta">
+      <div className="graph-node-meta" title={`Learning progress: ${percent}%`}>
           <span className="bar-track">
             <span className="bar-fill" style={{ width: `${percent}%` }} />
           </span>
           <span className="percent">{percent}%</span>
-        </div>
-      ) : null}
+      </div>
       <Handle type="source" position={Position.Bottom} />
     </div>
   );

@@ -33,6 +33,10 @@
       {
         "command": "tmtp.showOverview",
         "title": "TMTP: Show Project Overview"
+      },
+      {
+        "command": "tmtp.hideAICommentary",
+        "title": "TMTP: Hide AI Commentary"
       }
     ]
   },

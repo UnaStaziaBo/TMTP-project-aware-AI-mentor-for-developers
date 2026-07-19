@@ -23,6 +23,7 @@ graphMount.id = 'graph-mount';
 graphMount.style.display = 'none';
 rootContainer.append(appShell, graphMount);
 let graphRoot: Root | undefined;
+let pendingPracticeFile: string | undefined;
 
 type Tab = WorkspaceTab;
 
@@ -72,6 +73,7 @@ interface LearningProgressState {
   explained: Set<string>;
   practiced: Set<string>;
   mastered: Set<string>;
+  commentary: Map<string, { read: number; total: number }>;
 }
 
 /** The node currently opened from the Knowledge Map, and which of its three actions is showing. */
@@ -143,21 +145,23 @@ const state: State = {
     lessons: new Map(),
   },
   practice: createInitialPracticeState(),
-  learningProgress: { explained: new Set(), practiced: new Set(), mastered: new Set() },
+  learningProgress: { explained: new Set(), practiced: new Set(), mastered: new Set(), commentary: new Map() },
   knowledgeMap: { filePracticePlans: new Map() },
 };
 
-function learningStatusFor(file: string): { icon: string; label: string } {
+function learningStatusFor(file: string): { icon: string; label: string; progress: number } {
   if (state.learningProgress.mastered.has(file)) {
-    return { icon: '⭐', label: 'Mastered' };
+    return { icon: '⭐', label: 'Mastered', progress: 100 };
   }
   if (state.learningProgress.practiced.has(file)) {
-    return { icon: '🟠', label: 'Practiced' };
+    return { icon: '🟠', label: 'Practiced', progress: 80 };
   }
   if (state.learningProgress.explained.has(file) || state.tour.lessons.has(file)) {
-    return { icon: '🟡', label: 'Explained' };
+    const commentary = state.learningProgress.commentary.get(file);
+    const readRatio = commentary && commentary.total > 0 ? commentary.read / commentary.total : 0;
+    return { icon: '🟡', label: 'Explained', progress: Math.round(10 + readRatio * 50) };
   }
-  return { icon: '⚪', label: 'Not visited' };
+  return { icon: '⚪', label: 'Not visited', progress: 0 };
 }
 
 /** The toured files, in the same order as "Where Should I Start?", filtered to ones actually explained. */
@@ -303,10 +307,13 @@ const TABS: Array<[Tab, string]> = [
 ];
 
 function renderTabBar(): string {
+  const practiceFile = state.knowledgeMap.node?.file
+    ?? (state.tour.active ? state.result.startingFiles[state.tour.fileIndex]?.file : undefined)
+    ?? state.result.startingFiles[0]?.file;
   return `<div class="tab-bar">${TABS.map(
     ([key, label]) =>
       `<button class="tab-button ${state.activeTab === key ? 'active' : ''}" data-tab="${key}">${label}</button>`,
-  ).join('')}<button class="workspace-api-key-button" id="workspace-api-key">⚙ Change API Key</button></div>`;
+  ).join('')}<button class="workspace-practice-button" id="workspace-practice-file" ${practiceFile ? `data-file="${escapeHtml(practiceFile)}"` : 'disabled'}>🧪 Practice this File</button><button class="workspace-api-key-button" id="workspace-api-key">⚙ Change API Key</button></div>`;
 }
 
 function circledNumber(n: number): string {
@@ -516,6 +523,7 @@ function renderGuidedTourStep(): string {
     <div class="tour-nav">
       <button class="ai-link-button" id="tour-previous">← Previous</button>
       <button class="rescan-button" id="tour-open-file">Open File</button>
+      <button class="rescan-button" id="tour-practice-file">Practice this File</button>
       <button class="ai-link-button" id="tour-return-overview">Return to Overview</button>
       <button class="ai-explain-button" id="${isLast ? 'tour-start-assessment' : 'tour-next'}">${isLast ? 'Start Self-Assessment →' : 'Next →'}</button>
     </div>`;
@@ -875,6 +883,24 @@ function selectGraphNode(file: string): void {
   render();
 }
 
+function startFilePractice(file: string): void {
+  const cached = state.knowledgeMap.filePracticePlans.has(file);
+  state.activeTab = 'projectGraph';
+  state.knowledgeMap.node = {
+    file,
+    view: 'practice',
+    explainStatus: 'idle',
+    practiceStatus: cached ? 'ready' : 'generating',
+    practiceScenarioIndex: 0,
+  };
+  render();
+  if (state.status !== 'done') {
+    pendingPracticeFile = file;
+    return;
+  }
+  if (!cached) vscodeApi.postMessage({ type: 'requestFilePractice', file });
+}
+
 /**
  * Mounts (once) and re-renders the React Flow graph canvas into its own
  * persistent container — never through the vanilla innerHTML rewrite below,
@@ -996,6 +1022,10 @@ function render(): void {
     state.aiConfig.testMessage = undefined;
     render();
   });
+  document.getElementById('workspace-practice-file')?.addEventListener('click', (event) => {
+    const file = (event.currentTarget as HTMLElement).dataset.file;
+    if (file) startFilePractice(file);
+  });
 
   document.querySelectorAll<HTMLElement>('.starting-file-open').forEach((button) => {
     button.addEventListener('click', () => {
@@ -1040,6 +1070,10 @@ function render(): void {
     if (file) {
       vscodeApi.postMessage({ type: 'openFile', file });
     }
+  });
+  document.getElementById('tour-practice-file')?.addEventListener('click', () => {
+    const file = state.result.startingFiles[state.tour.fileIndex]?.file;
+    if (file) startFilePractice(file);
   });
   document.getElementById('tour-return-overview')?.addEventListener('click', () => {
     state.activeTab = 'overview';
@@ -1151,17 +1185,7 @@ function render(): void {
   document.getElementById('km-practice-file')?.addEventListener('click', () => {
     const node = state.knowledgeMap.node;
     if (!node) return;
-    node.view = 'practice';
-    node.practiceScenarioIndex = 0;
-    node.practiceSelectedOption = undefined;
-    if (state.knowledgeMap.filePracticePlans.has(node.file)) {
-      node.practiceStatus = 'ready';
-      render();
-      return;
-    }
-    node.practiceStatus = 'generating';
-    render();
-    vscodeApi.postMessage({ type: 'requestFilePractice', file: node.file });
+    startFilePractice(node.file);
   });
   document.getElementById('km-practice-retry')?.addEventListener('click', () => {
     const node = state.knowledgeMap.node;
@@ -1226,6 +1250,12 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
     case 'scanComplete':
       state.status = 'done';
       state.totalElapsedMs = message.totalElapsedMs;
+      if (pendingPracticeFile) {
+        const file = pendingPracticeFile;
+        pendingPracticeFile = undefined;
+        startFilePractice(file);
+        return;
+      }
       break;
     case 'scanError':
       state.status = 'error';
@@ -1311,6 +1341,7 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
         explained: new Set(message.explained),
         practiced: new Set(message.practiced),
         mastered: new Set(message.mastered),
+        commentary: new Map(Object.entries(message.commentary)),
       };
       break;
     case 'navigateToTab':
@@ -1323,6 +1354,9 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
       state.aiConfig.testStatus = 'idle';
       state.aiConfig.testMessage = undefined;
       break;
+    case 'startFilePractice':
+      startFilePractice(message.file);
+      return;
   }
 
   render();

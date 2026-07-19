@@ -116,6 +116,15 @@ lesson on demand — never a batch of invented stops, never a generic example.
     order to keep in sync
   - **Open File** opens the current file in the editor from either the starting-files
     list or the tour itself
+  - explaining a file opens its real source beside TMTP and renders each Key
+    Construct as a native, collapsible editor comment thread directly beneath
+    the matching lines. These rich blocks contain the full project context,
+    role, language, and architectural rationale but never alter the source or
+    Git working tree. Threads start collapsed and expose persistent explicit
+    read/unread tracking; editing the file removes stale commentary automatically
+  - graph percentages represent actual learning progress (lesson generated →
+    constructs read → practiced → mastered), while deterministic scanner
+    confidence is retained separately as a node-importance signal
   - idempotent: each file's lesson is cached (in memory and in `workspaceState`)
     the first time it's generated, so revisiting a file or reopening the panel never
     re-bills the same generation

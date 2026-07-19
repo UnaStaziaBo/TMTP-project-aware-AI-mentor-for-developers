@@ -4,6 +4,7 @@ import { deriveProjectArea, deriveShortDescription, importanceTier, type Importa
 export interface GraphLearningStatus {
   icon: string;
   label: string;
+  progress?: number;
 }
 
 export interface GraphNodeView {
@@ -21,6 +22,8 @@ export interface GraphNodeView {
   isAuxiliary?: boolean;
   /** Scanner evidence explaining why this file matters as a learning stop. */
   learningReason?: string;
+  /** Actual study progress; scanner confidence remains a separate importance signal. */
+  learningProgress?: number;
 }
 
 export interface GraphEdgeView {
@@ -82,6 +85,7 @@ export function buildProjectGraphViewModel(
   const allNodes: GraphNodeView[] = result.files.map((file) => {
     const candidate = candidateByFile.get(file.path);
     const confidence = candidate?.confidence ?? 0;
+    const learningStatus = learningStatusFor(file.path);
     return {
       file: file.path,
       title: file.path.split('/').pop() ?? file.path,
@@ -90,7 +94,8 @@ export function buildProjectGraphViewModel(
       score: candidate?.score ?? 0,
       confidence,
       tier: importanceTier(confidence),
-      learningStatus: learningStatusFor(file.path),
+      learningStatus,
+      learningProgress: learningStatus.progress ?? 0,
       hasEdge: filesWithEdges.has(file.path),
       isAuxiliary: isAuxiliaryFile(file.path),
       learningReason:

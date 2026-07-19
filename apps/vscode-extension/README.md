@@ -33,6 +33,24 @@ the open folder and streams results into a themed editor webview with four tabs:
   deterministically-planned multiple-choice scenarios (weighted toward the
   files rated least confident) whose situations and explanations are
   AI-written but whose file/option/order selection is not.
+  Generating or reopening a cached lesson also opens the real source beside
+  TMTP and attaches rich native editor comment threads to each matched Key
+  Construct. The complete Project Context, Role, Language, and Why it matters
+  text therefore appears directly beneath the relevant code without modifying
+  the file. Every construct starts collapsed so the source remains primary.
+  Opening a block exposes an explicit **Mark as read** action; read/unread state
+  is shown in the thread label, can be toggled again, and persists in
+  `workspaceState`. Any source edit removes that file's commentary to avoid stale anchors.
+  Each commentary block also includes **Practice this File**, which jumps
+  directly to that file's dedicated exercise flow. The same action is present
+  alongside the Guided Tour navigation buttons, so practice does not require
+  finishing the whole tour or returning to the graph first.
+  Run `TMTP: Hide AI Commentary` to clear all visible teaching threads.
+  The percentage shown on graph nodes is real learning progress rather than
+  scanner confidence: 0% unvisited, 10% when explained, up to 60% as Key
+  Constructs are marked read, 80% after practice, and 100% when mastered.
+  Scanner confidence still controls visual importance, but is no longer shown
+  as though it were study completion.
 - **🕸️ Project Graph** — an explorable code-and-learning graph of the project
   (React Flow + ELK.js), replacing the old flat Knowledge Map list. ELK's
   layered algorithm lays every file out top-to-bottom by dependency direction
@@ -75,8 +93,9 @@ To reopen the panel manually, run the `TMTP: Show Project Overview` command.
 
 - `src/extension.ts` — activation, runs each pipeline stage in turn, streams
   progress to the webview, generates a file's lesson on request (config
-  lookup, provider call, caching), and opens a file on request. Never sends
-  the API key to the webview.
+  lookup, provider call, caching), maps lesson snippets back to source ranges,
+  owns native AI-commentary threads, and opens files on request. Never sends
+  the API key to the webview or writes AI commentary into source files.
 - `src/sidebarView.ts` — the Activity Bar Learning Home: project/scan status,
   persisted learning counts, AI status, and navigation into a selected full
   workspace tab. It intentionally keeps the graph and lessons in the editor.
