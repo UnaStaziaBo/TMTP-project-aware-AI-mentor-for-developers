@@ -33,6 +33,7 @@ let masteredFiles = new Set<string>();
 let sidebarProvider: TmtpSidebarProvider | undefined;
 let activeContext: vscode.ExtensionContext | undefined;
 let requestedTab: WorkspaceTab = 'overview';
+let requestedAIConfig = false;
 
 async function refreshSidebar(): Promise<void> {
   if (!sidebarProvider || !activeContext) return;
@@ -342,11 +343,17 @@ function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri): stri
 </html>`;
 }
 
-function openOverviewPanel(context: vscode.ExtensionContext, tab: WorkspaceTab = 'overview'): void {
+function openOverviewPanel(
+  context: vscode.ExtensionContext,
+  tab: WorkspaceTab = 'overview',
+  showAIConfig = false,
+): void {
   requestedTab = tab;
+  requestedAIConfig = showAIConfig;
   if (panel) {
     panel.reveal(vscode.ViewColumn.One);
     void panel.webview.postMessage({ type: 'navigateToTab', tab } satisfies ExtensionMessage);
+    if (showAIConfig) void panel.webview.postMessage({ type: 'showAIConfig' } satisfies ExtensionMessage);
     return;
   }
 
@@ -378,6 +385,10 @@ function openOverviewPanel(context: vscode.ExtensionContext, tab: WorkspaceTab =
         void postAIConfigStatus(context, post);
         postLearningProgress(post);
         post({ type: 'navigateToTab', tab: requestedTab });
+        if (requestedAIConfig) {
+          post({ type: 'showAIConfig' });
+          requestedAIConfig = false;
+        }
         break;
       case 'rescan':
         startScan();
@@ -436,6 +447,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   sidebarProvider = new TmtpSidebarProvider(
     (tab) => openOverviewPanel(context, tab),
+    () => openOverviewPanel(context, 'guidedTour', true),
     {
       projectName: vscode.workspace.workspaceFolders?.[0]?.name ?? '',
       scanned: false,

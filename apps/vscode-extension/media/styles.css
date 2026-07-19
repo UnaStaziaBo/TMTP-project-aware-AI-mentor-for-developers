@@ -295,6 +295,25 @@ body.graph-mode #root {
   border-bottom-color: var(--vscode-charts-blue);
 }
 
+.workspace-api-key-button {
+  margin-left: auto;
+  align-self: center;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--vscode-textLink-foreground);
+  background: transparent;
+  font: inherit;
+  font-size: 11.5px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.workspace-api-key-button:hover {
+  border-color: var(--vscode-widget-border, var(--vscode-panel-border));
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
 /* ---- Starting files screen ---- */
 
 .screen-heading {

@@ -19,6 +19,7 @@ export class TmtpSidebarProvider implements vscode.WebviewViewProvider {
 
   constructor(
     private readonly openWorkspace: (tab: WorkspaceTab) => void,
+    private readonly openAIConfig: () => void,
     initialSnapshot: SidebarSnapshot,
   ) {
     this.snapshot = initialSnapshot;
@@ -29,6 +30,7 @@ export class TmtpSidebarProvider implements vscode.WebviewViewProvider {
     view.webview.options = { enableScripts: true };
     view.webview.onDidReceiveMessage((message: { type?: string; tab?: WorkspaceTab }) => {
       if (message.type === 'open' && message.tab) this.openWorkspace(message.tab);
+      if (message.type === 'configureAI') this.openAIConfig();
     });
     this.render();
   }
@@ -62,9 +64,10 @@ export class TmtpSidebarProvider implements vscode.WebviewViewProvider {
       <button class="primary" data-tab="${s.scanned ? 'startingFiles' : 'overview'}">${nextAction} →</button></div>
       <div class="stats"><div class="stat"><div class="value">${s.explainedCount}</div><div class="label">Explained</div></div><div class="stat"><div class="value">${s.masteredCount}</div><div class="label">Mastered</div></div></div>
       <div class="section"><div class="section-title">Learning workspace</div>
-        <button data-tab="overview">Project Overview</button><button data-tab="startingFiles">Where Should I Start?</button><button data-tab="guidedTour">Guided Tour</button><button data-tab="projectGraph">Project Graph</button>
+        <button data-tab="projectGraph">Project Graph</button><button data-tab="overview">Project Overview</button><button data-tab="startingFiles">Where Should I Start?</button><button data-tab="guidedTour">Guided Tour</button>
       </div><div class="status">AI provider: ${s.aiConfigured ? 'Configured' : 'Not configured'}</div>
-      <script nonce="${nonce}">const vscode=acquireVsCodeApi();document.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',()=>vscode.postMessage({type:'open',tab:b.dataset.tab})));</script>
+      <button data-action="configure-ai">⚙ Change API Key</button>
+      <script nonce="${nonce}">const vscode=acquireVsCodeApi();document.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',()=>vscode.postMessage({type:'open',tab:b.dataset.tab})));document.querySelector('[data-action="configure-ai"]')?.addEventListener('click',()=>vscode.postMessage({type:'configureAI'}));</script>
       </body></html>`;
   }
 }

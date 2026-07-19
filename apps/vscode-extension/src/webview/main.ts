@@ -296,17 +296,17 @@ function renderFileTypes(): string {
 }
 
 const TABS: Array<[Tab, string]> = [
+  ['projectGraph', '🕸️ Project Graph'],
   ['overview', 'Project Overview'],
   ['startingFiles', 'Where Should I Start?'],
   ['guidedTour', 'Guided Tour'],
-  ['projectGraph', '🕸️ Project Graph'],
 ];
 
 function renderTabBar(): string {
   return `<div class="tab-bar">${TABS.map(
     ([key, label]) =>
       `<button class="tab-button ${state.activeTab === key ? 'active' : ''}" data-tab="${key}">${label}</button>`,
-  ).join('')}</div>`;
+  ).join('')}<button class="workspace-api-key-button" id="workspace-api-key">⚙ Change API Key</button></div>`;
 }
 
 function circledNumber(n: number): string {
@@ -989,6 +989,13 @@ function render(): void {
     state.aiConfig.editingConfig = true;
     render();
   });
+  document.getElementById('workspace-api-key')?.addEventListener('click', () => {
+    state.activeTab = 'guidedTour';
+    state.aiConfig.editingConfig = true;
+    state.aiConfig.testStatus = 'idle';
+    state.aiConfig.testMessage = undefined;
+    render();
+  });
 
   document.querySelectorAll<HTMLElement>('.starting-file-open').forEach((button) => {
     button.addEventListener('click', () => {
@@ -1309,6 +1316,12 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
     case 'navigateToTab':
       state.activeTab = message.tab;
       state.knowledgeMap.node = undefined;
+      break;
+    case 'showAIConfig':
+      state.activeTab = 'guidedTour';
+      state.aiConfig.editingConfig = true;
+      state.aiConfig.testStatus = 'idle';
+      state.aiConfig.testMessage = undefined;
       break;
   }
 

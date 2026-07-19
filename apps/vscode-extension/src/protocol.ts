@@ -46,7 +46,8 @@ export type ExtensionMessage =
   | { type: 'filePracticeResult'; file: string; plan: PracticePlan; cached: boolean }
   | { type: 'filePracticeError'; file: string; message: string }
   | { type: 'learningProgress'; explained: string[]; practiced: string[]; mastered: string[] }
-  | { type: 'navigateToTab'; tab: WorkspaceTab };
+  | { type: 'navigateToTab'; tab: WorkspaceTab }
+  | { type: 'showAIConfig' };
 
 export type WebviewMessage =
   | { type: 'rescan' }
