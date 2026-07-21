@@ -8,15 +8,17 @@ export interface AIProviderCredentials {
   model: string;
 }
 
+export type AIProviderId = 'openai' | 'anthropic' | 'gemini';
+
 export type TestConnectionResult = { ok: true } | { ok: false; message: string };
 
 /**
- * The provider abstraction future AI features should build on. OpenAIProvider
- * is the first implementation; adding another provider means implementing
- * this interface, not touching call sites.
+ * The provider abstraction all AI features build on. Provider-specific API
+ * formats stay behind this interface so lesson and practice call sites share
+ * the same deterministic contexts and validated result contracts.
  */
 export interface AIProvider {
-  readonly id: string;
+  readonly id: AIProviderId;
   readonly label: string;
   testConnection(credentials: AIProviderCredentials): Promise<TestConnectionResult>;
   generateFileLesson(context: FileLessonContext, credentials: AIProviderCredentials): Promise<FileLesson>;

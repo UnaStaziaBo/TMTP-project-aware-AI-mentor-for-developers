@@ -1,7 +1,7 @@
 import { createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { ProjectScanResult } from '@tmpt/scanner';
-import type { FileLesson, PracticePlan } from '@tmpt/ai';
+import type { AIProviderId, FileLesson, PracticePlan } from '@tmpt/ai';
 import { buildProjectGraphViewModel } from '../projectGraphView.js';
 import { ProjectGraphCanvas } from './graph/ProjectGraphCanvas.js';
 import { STAGES, type ExtensionMessage, type FileConfidence, type StageKey, type WorkspaceTab } from '../protocol.js';
@@ -29,13 +29,24 @@ type Tab = WorkspaceTab;
 
 interface AIConfigState {
   configured: boolean;
-  provider?: string;
+  provider?: AIProviderId;
   model?: string;
   editingConfig: boolean;
+  providerDraft: AIProviderId;
   apiKeyDraft: string;
   modelDraft: string;
   testStatus: 'idle' | 'testing' | 'success' | 'failure';
   testMessage?: string;
+}
+
+const AI_PROVIDERS: Array<{ id: AIProviderId; label: string; defaultModel: string; keyPlaceholder: string }> = [
+  { id: 'openai', label: 'OpenAI', defaultModel: 'gpt-5.5', keyPlaceholder: 'sk-...' },
+  { id: 'anthropic', label: 'Anthropic Claude', defaultModel: 'claude-opus-4-8', keyPlaceholder: 'sk-ant-...' },
+  { id: 'gemini', label: 'Google Gemini', defaultModel: 'gemini-3.5-flash', keyPlaceholder: 'Google AI API key' },
+];
+
+function providerOption(id: AIProviderId) {
+  return AI_PROVIDERS.find((provider) => provider.id === id)!;
 }
 
 interface GuidedTourState {
@@ -134,6 +145,7 @@ const state: State = {
   aiConfig: {
     configured: false,
     editingConfig: true,
+    providerDraft: 'openai',
     apiKeyDraft: '',
     modelDraft: 'gpt-5.5',
     testStatus: 'idle',
@@ -313,7 +325,7 @@ function renderTabBar(): string {
   return `<div class="tab-bar">${TABS.map(
     ([key, label]) =>
       `<button class="tab-button ${state.activeTab === key ? 'active' : ''}" data-tab="${key}">${label}</button>`,
-  ).join('')}<button class="workspace-practice-button" id="workspace-practice-file" ${practiceFile ? `data-file="${escapeHtml(practiceFile)}"` : 'disabled'}>🧪 Practice this File</button><button class="workspace-api-key-button" id="workspace-api-key">⚙ Change API Key</button></div>`;
+  ).join('')}<button class="workspace-practice-button" id="workspace-practice-file" ${practiceFile ? `data-file="${escapeHtml(practiceFile)}"` : 'disabled'}>🧪 Practice this File</button><button class="workspace-api-key-button" id="workspace-api-key">⚙ Change AI Provider</button></div>`;
 }
 
 function circledNumber(n: number): string {
@@ -385,6 +397,7 @@ function renderStartingFilesScreen(): string {
 
 function renderAISettingsForm(): string {
   const ai = state.aiConfig;
+  const selectedProvider = providerOption(ai.providerDraft);
   const statusText =
     ai.testStatus === 'success'
       ? '✓ Connection successful'
@@ -400,11 +413,16 @@ function renderAISettingsForm(): string {
       <p>Configure an AI provider</p>
     </div>
     <div class="ai-settings-form">
-      <div class="ai-field-label">AI Provider</div>
-      <label class="ai-radio-row"><input type="radio" checked disabled /> OpenAI</label>
+      <label class="ai-field-label" for="ai-provider">AI Provider</label>
+      <select class="ai-text-input" id="ai-provider">
+        ${AI_PROVIDERS.map(
+          (provider) =>
+            `<option value="${provider.id}" ${provider.id === ai.providerDraft ? 'selected' : ''}>${provider.label}</option>`,
+        ).join('')}
+      </select>
 
       <label class="ai-field-label" for="ai-api-key">API Key</label>
-      <input class="ai-text-input" id="ai-api-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-..." value="${escapeHtml(ai.apiKeyDraft)}" />
+      <input class="ai-text-input" id="ai-api-key" type="password" autocomplete="off" spellcheck="false" placeholder="${escapeHtml(selectedProvider.keyPlaceholder)}" value="${escapeHtml(ai.apiKeyDraft)}" />
 
       <label class="ai-field-label" for="ai-model">Model</label>
       <input class="ai-text-input" id="ai-model" type="text" autocomplete="off" spellcheck="false" value="${escapeHtml(ai.modelDraft)}" />
@@ -416,14 +434,14 @@ function renderAISettingsForm(): string {
       </div>
       ${statusText ? `<div class="ai-test-message ${ai.testStatus}">${escapeHtml(statusText)}</div>` : ''}
     </div>
-    <p class="ai-privacy-note">Your API key is stored only in VS Code's Secret Storage. It is never written to settings.json and never sent back to this webview.</p>`;
+    <p class="ai-privacy-note">Each provider's API key is stored separately in VS Code's Secret Storage. Keys are never written to settings.json or sent back to this webview.</p>`;
 }
 
 function renderGuidedTourIntro(): string {
   const hasStartingFiles = state.result.startingFiles.length > 0;
   const subtitle =
     state.aiConfig.configured && state.aiConfig.provider && state.aiConfig.model
-      ? `Configured — ${state.aiConfig.provider} / ${state.aiConfig.model}`
+      ? `Configured — ${providerOption(state.aiConfig.provider).label} / ${state.aiConfig.model}`
       : '';
 
   return `
@@ -439,7 +457,7 @@ function renderGuidedTourIntro(): string {
           : `<button class="tour-placeholder-button" disabled>Start Guided Tour</button>
              <div class="tour-placeholder-caption">No starting files were detected yet.</div>`
       }
-      <button class="ai-link-button" id="ai-edit-config">⚙ Change API Key</button>
+      <button class="ai-link-button" id="ai-edit-config">⚙ Change AI Provider</button>
     </div>`;
 }
 
@@ -985,6 +1003,15 @@ function render(): void {
   document.getElementById('ai-api-key')?.addEventListener('input', (event) => {
     state.aiConfig.apiKeyDraft = (event.target as HTMLInputElement).value;
   });
+  document.getElementById('ai-provider')?.addEventListener('change', (event) => {
+    const provider = (event.target as HTMLSelectElement).value as AIProviderId;
+    state.aiConfig.providerDraft = provider;
+    state.aiConfig.modelDraft = providerOption(provider).defaultModel;
+    state.aiConfig.apiKeyDraft = '';
+    state.aiConfig.testStatus = 'idle';
+    state.aiConfig.testMessage = undefined;
+    render();
+  });
   document.getElementById('ai-model')?.addEventListener('input', (event) => {
     state.aiConfig.modelDraft = (event.target as HTMLInputElement).value;
   });
@@ -994,16 +1021,18 @@ function render(): void {
     render();
     vscodeApi.postMessage({
       type: 'aiTestConnection',
+      provider: state.aiConfig.providerDraft,
       apiKey: state.aiConfig.apiKeyDraft,
-      model: state.aiConfig.modelDraft || 'gpt-5.5',
+      model: state.aiConfig.modelDraft || providerOption(state.aiConfig.providerDraft).defaultModel,
     });
   });
   document.getElementById('ai-save')?.addEventListener('click', () => {
     if (!state.aiConfig.apiKeyDraft) return;
     vscodeApi.postMessage({
       type: 'aiSaveConfig',
+      provider: state.aiConfig.providerDraft,
       apiKey: state.aiConfig.apiKeyDraft,
-      model: state.aiConfig.modelDraft || 'gpt-5.5',
+      model: state.aiConfig.modelDraft || providerOption(state.aiConfig.providerDraft).defaultModel,
     });
     state.aiConfig.apiKeyDraft = '';
   });
@@ -1266,6 +1295,9 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
       state.aiConfig.provider = message.provider;
       state.aiConfig.model = message.model;
       state.aiConfig.editingConfig = !message.configured;
+      if (message.provider) {
+        state.aiConfig.providerDraft = message.provider;
+      }
       if (message.model) {
         state.aiConfig.modelDraft = message.model;
       }

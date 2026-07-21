@@ -6,9 +6,10 @@ no dependency on this package; the dependency only goes one way.
 
 ## What it does
 
-- `AIProvider` — the interface future providers implement (`testConnection`,
-  `generateFileLesson`, `generatePracticePlan`). `OpenAIProvider` is the first
-  implementation.
+- `AIProvider` — the shared interface implemented by `OpenAIProvider`,
+  `AnthropicProvider`, and `GeminiProvider` (`testConnection`,
+  `generateFileLesson`, `generatePracticePlan`). `createAIProvider` selects the
+  configured implementation without changing lesson or practice call sites.
 - `generateFileLesson` — given a `FileLessonContext` (a single file's path,
   full real content, detected language, and the scanner's deterministic
   reasons for flagging it as a starting point), produces a `FileLesson`: a
@@ -60,7 +61,7 @@ caller's responsibility (see the VS Code extension's `extension.ts`).
 
 ## Testing
 
-Tests are unit-level and don't require a real API key: `OpenAIProvider` is
-tested against a mocked `fetch`; lesson and practice parsers are tested against
+Tests are unit-level and don't require a real API key: all three provider
+adapters are tested against a mocked `fetch`; lesson and practice parsers are tested against
 well-formed and malformed responses; and correct answers/options are verified
 to remain controlled by deterministic `ScenarioFocus` input.

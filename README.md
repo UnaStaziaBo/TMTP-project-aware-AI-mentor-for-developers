@@ -1,357 +1,313 @@
 # TMTP
 
-Teach Me This Project (TMTP) is a project-aware AI mentor for software developers.
+### Understand the project before you modify it.
 
-Unlike traditional coding assistants that begin from a prompt, TMTP first understands the software project itself. It analyzes the repository structure, technologies, conventions, and dependencies before offering guidance, so learning support is grounded in the actual codebase.
+TMTP—**Teach Me This Project**—is a VS Code extension that helps developers find their way through an unfamiliar codebase. It analyzes the repository first, shows where to begin, and then uses AI to explain the project through its real files and architectural decisions.
 
-TMTP is an early open-source project with four completed milestones: a deterministic project analysis pipeline, a starting-file discovery engine, a Guided Project Tour that turns the ranked starting files themselves into the textbook, and an Interactive Learning Graph. The graph combines scanner-verified imports with an explicitly labelled, deterministic learning sequence, so it answers both “how is this code connected?” and “what should I learn next?” without presenting teaching relationships as code facts.
+<!-- [Get started](#installation) · [See how it works](#how-tmtp-works) · [View the roadmap](#roadmap) · [Report an issue](https://github.com/UnaStaziaBo/TMTP-project-aware-AI-mentor-for-developers/issues) -->
 
-## Why TMTP exists
+> TMTP is an early public release. The deterministic analysis, project graph, guided lessons, practice flows, and progress tracking described below are implemented today. Current limitations are documented openly.
 
-Most developer tools provide generic answers without understanding the project context. TMTP aims to change that by building a reusable analysis engine that can later support personalized learning, onboarding help, and concept-based guidance.
+## The problem
 
-The long-term vision is to build:
+You cloned a repository. It builds. The tests pass. Now comes the harder question:
 
-- a Project Graph (the visualization now exists — see Milestone 4 — though a
-  deeper standalone `graph` package with richer relationship types is still future work)
-- a Developer Profile
-- knowledge-gap detection
-- personalized learning recommendations
-- explainable guidance grounded in the repository
+> **Where do I even start?**
 
-## Current milestones
+A file tree tells you what exists, but not what matters. A dependency graph shows connections, but not what to learn first. Search can find a symbol, but it cannot explain why the project is structured that way.
 
-### Milestone 1: Project Analysis Pipeline v0.1
+Coding assistants are useful once you know what to ask. In an unfamiliar codebase, forming the right question is often the first obstacle.
 
-### Implemented stages
+TMTP is built for that moment. It helps you understand the project before asking you to change it.
 
-- ✅ Filesystem Scanner
-  - recursive project scanning
-  - file discovery
-  - folder discovery
-  - manifest detection
-  - ignore rules
+## Why TMTP
 
-- ✅ Language Detection
-  - Python
-  - TypeScript
-  - Java
-  - Go
-  - Rust
-  - evidence-based detection with confidence scores
+Most AI coding workflows begin with a prompt. TMTP begins with the repository.
 
-- ✅ Framework Detection
-  - FastAPI
-  - React
-  - NestJS
-  - Django
-  - Spring Boot
+It first runs a deterministic local analysis to discover project structure, technologies, important files, and supported import relationships. That analysis decides what is present and where the learning journey should begin. AI is introduced only when you request an explanation or practice exercise.
 
-- ✅ Infrastructure Detection
-  - Docker
-  - Docker Compose
-  - GitHub Actions
-  - Kubernetes
-  - Terraform
-  - Dev Containers
-  - Nginx
+This separation matters:
 
-- ✅ Dependency Detection
-  - Pydantic
-  - SQLAlchemy
-  - React Router
-  - Axios
-  - JWT
-  - Django REST Framework
-  - Spring Security
-  - FastAPI
-  - Prisma
-  - Redux
-  - Jest
-  - Vitest
-  - Zod
-  - Alembic
+- **The scanner establishes evidence.** Files, signals, rankings, and graph relationships do not come from an AI guess.
+- **AI explains a constrained context.** A lesson is grounded in one real file, its source, detected language, and the reasons it was recommended.
+- **Code remains the source of truth.** TMTP teaches through the repository you opened rather than replacing it with a generic tutorial.
+- **Understanding comes before coding.** TMTP is a learning and onboarding companion, not a general-purpose code generator or chat interface.
 
-### Milestone 2: Starting File Discovery Engine
-
-Answers a single question before any AI is involved: *if a developer has never seen
-this project before, which file(s) should they open first?* Many projects have no
-single entry point (frontend + backend, CLI + API, training + inference, a library
-with examples), so the stage produces a ranked list rather than assuming one.
-
-- ✅ Starting File Discovery
-  - deterministic, rule-based scoring (executable entry, framework bootstrap,
-    conventional filenames, import centrality, reverse-reference counts,
-    orchestration size, small-file penalties)
-  - every score is explainable via a plain-language `reasons` list
-  - confidence normalized to 0.0–1.0
-  - never collapses multiple valid starting points into one
-
-### Milestone 3: Guided Project Tour
-
-The first AI-powered feature, and the first real teaching experience in one: instead
-of a one-shot repository summary, the ranked `startingFiles` list from Milestone 2
-*is* the tour. Clicking **Explain** on any starting-file card generates that file's
-lesson on demand — never a batch of invented stops, never a generic example.
-
-- ✅ Guided Project Tour (`packages/ai`, `apps/vscode-extension`)
-  - provider abstraction (`AIProvider`) with an OpenAI implementation — designed
-    so a second provider is a new implementation, not a call-site change
-  - API key stored only in VS Code SecretStorage, never in settings.json, never
-    sent to the webview — the webview only ever learns whether a provider is configured
-  - `generateFileLesson` grounds every lesson in one real file: its full content,
-    the detected primary language, and the deterministic `reasons` Starting File
-    Discovery already assigned it — never re-analysis, never an invented file
-  - structured JSON response (`FileLesson`: a project-context summary — `title` +
-    `responsibility` — followed by an ordered `keyConstructs` list), shape-validated
-    on the way in
-  - **Step 1 — Project Context**: what the file is responsible for, where it fits,
-    and why it exists, explained before any code is shown
-  - **Step 2 — Key Constructs**: only the handful of constructs that matter (not
-    every line), each with a snippet copied verbatim from the file and three tied-
-    together explanations — Project (what's happening here), Language (which
-    language feature this is), Architecture (why this project chose this approach)
-  - navigation is **Previous** / **Next** / **Return to Overview**, stepping
-    through the same ranked starting-files list — no separate AI-invented stop
-    order to keep in sync
-  - **Open File** opens the current file in the editor from either the starting-files
-    list or the tour itself
-  - explaining a file opens its real source beside TMTP and renders each Key
-    Construct as a native, collapsible editor comment thread directly beneath
-    the matching lines. These rich blocks contain the full project context,
-    role, language, and architectural rationale but never alter the source or
-    Git working tree. Threads start collapsed and expose persistent explicit
-    read/unread tracking; editing the file removes stale commentary automatically
-  - graph percentages represent actual learning progress (lesson generated →
-    constructs read → practiced → mastered), while deterministic scanner
-    confidence is retained separately as a node-importance signal
-  - **Practice this File** is available from the Learning Home sidebar, the
-    global workspace toolbar, Guided Tour navigation, graph file details, and
-    native in-editor commentary. Global entry points use the current file when
-    one exists or let the developer choose a recommended file
-  - focused practice contains intro, intermediate, and advanced architectural
-    scenarios. The selected file remains the learning subject, but correct
-    answers rotate deterministically across it and related choices, testing
-    what belongs in the file and what should be delegated elsewhere. Option
-    order rotates too, so neither the selected filename nor a fixed position
-    reveals the answer
-  - the deterministic planner fixes the learning file, correct answer, options,
-    option order, and difficulty before AI writes the situation/explanation;
-    runtime validation restores those fixed fields rather than trusting model output
-  - idempotent: each file's lesson is cached (in memory and in `workspaceState`)
-    the first time it's generated, so revisiting a file or reopening the panel never
-    re-bills the same generation
-
-### Milestone 4: Interactive Learning Graph
-
-Replaces the old flat, accordion-style Knowledge Map with a real, explorable node/edge
-graph — the goal is to *see* the project, not browse a list of it. Built with
-[React Flow](https://reactflow.dev) and [ELK.js](https://github.com/kieler/elkjs)
-for layout; this is the first React code in the extension, deliberately contained
-to this one screen — everything else stays the vanilla-DOM architecture it always was.
-(The layout originally used [dagre](https://github.com/dagrejs/dagre); it was replaced
-by ELK's layered algorithm after the first version's layout felt cluttered — see
-"Graph layout redesign" below.)
-
-- ✅ Interactive Learning Graph (`packages/scanner`, `apps/vscode-extension`)
-  - **the graph is deterministic, never AI-generated.** The scanner's existing
-    import resolver (already built for Starting File Discovery) now also emits the
-    verified edges it finds while scoring files — zero extra file reads, zero new
-    analysis, and an edge only ever exists if the resolver could actually verify
-    the relationship. A project with only partial import support (or none) just
-    gets a sparser graph, never a padded or invented one.
-  - **node design**: file name, project area, deterministic role/description (reusing the same
-    `deriveShortDescription`/`deriveProjectArea` helpers from the old Knowledge
-    Map), importance score, learning step and rationale, and live learning status
-    (⚪ not visited / 🟡 explained / 🟠 practiced / ⭐ mastered) — all visible
-    without opening the node.
-  - **two relationship types are deliberately separated**: solid arrows are
-    scanner-verified imports (`source → imported file`); green dashed arrows are
-    the deterministic recommended lesson sequence. Learning edges organize the
-    reading experience but are never represented as code dependencies.
-  - **progressive scope**: **Core** opens with a small project backbone,
-    **Related** adds the core files' direct neighbours, and **All files** exposes
-    the complete scan. Search can reveal a matching file outside the current scope.
-  - generated JavaScript beside TypeScript source, declarations, source maps,
-    tests, examples, and build output remain available in **All files** but do not
-    lead the Core view. Core representatives are spread across project areas so
-    one package or demo cannot consume the entire opening graph.
-  - **visual hierarchy is driven by the same deterministic score**: border weight
-    and color intensity scale with importance, and the layered layout naturally
-    floats heavily-depended-upon files toward the top.
-  - clicking a node opens the *exact same* detail panel Milestone 3 already
-    built — **Open File**, **Explain this File** (the Guided Tour lesson),
-    **Practice this File** (the Day 1 Practice system) are all reused verbatim,
-    plus a new **Mark as Learned** action for explicitly promoting a file to ⭐.
-  - hovering a node emphasizes outgoing “uses” imports in orange and incoming
-    “used by” imports in blue while fading unrelated imports; the permanent
-    legend explains both import direction and recommended learning order
-  - zoom, pan, and fit-to-screen come from React Flow; a custom themed SVG
-    overview renders the same ELK nodes and routes in miniature because React
-    Flow's built-in minimap did not render reliably inside the VS Code webview; the
-    canvas is mounted once into its own persistent DOM container rather than
-    torn down on every unrelated re-render, so pan/zoom/search state survives
-    normal use of the rest of the extension
-
-#### Graph layout redesign
-
-The first version's dagre-based layout looked cluttered in practice: nodes
-overlapped, edges crossed through unrelated nodes, and unrelated files got
-pulled into the same tangled mass as the main dependency chain. Root causes:
-
-  - node size varied by importance tier, and a layered layout sizes each rank
-    by its tallest node — one large node next to several small ones wasted a
-    lot of vertical space and threw off consistent spacing.
-  - edges were drawn as a React Flow `smoothstep` curve computed from just the
-    two endpoints, with no awareness of where other nodes actually sat, so a
-    line could easily cut straight through an unrelated node.
-  - dagre's single-pass crossing-minimization is weaker than a true layered
-    (Sugiyama-style) algorithm's, so busier graphs crossed more than necessary.
-  - disconnected files (no import path to anything else) were laid out
-    alongside the main chain instead of set apart, contributing to a
-    "hairball" look as the file count grew.
-  - every node click re-ran `fitView`, so simply selecting a file could
-    recenter/rezoom the camera unexpectedly.
-
-The layout now runs on [ELK.js](https://github.com/kieler/elkjs)'s layered
-algorithm (`elk.algorithm: 'layered'`, strong `LAYER_SWEEP` crossing
-minimization, `BRANDES_KOEPF` node placement) instead of dagre:
-
-  - all nodes are now a single, fixed size — importance shows through border
-    weight and color intensity only, so one rank is never stretched by a
-    single oversized node.
-  - edges are drawn along ELK's real computed route (its `sections`
-    bend points), not a guessed curve, and are smoothed client-side into a
-    curve that still follows that node-avoiding path.
-  - `elk.separateConnectedComponents` clusters disconnected files apart from
-    the main chain instead of interleaving them into one hairball.
-  - selecting a node (click) no longer moves the camera; only explicit
-    navigation — "Fit to Screen" or searching and pressing Enter — does.
-  - the layout is computed asynchronously off ELK, cached per visible node
-    set (not recomputed on every selection), with an "Arranging…" indicator
-    while it runs.
-  - graph mode uses compact project chrome and all remaining editor height, so
-    it stays useful even when VS Code's terminal panel is open.
-
-## Architecture
-
-TMTP uses a deterministic pipeline architecture. Each stage enriches the same project analysis result object.
+## How TMTP works
 
 ```text
-Project
-↓
-Filesystem Stage
-↓
-Language Stage
-↓
-Framework Stage
-↓
-Infrastructure Stage
-↓
-Dependency Stage
-↓
-Starting File Stage
-↓
-ProjectScanResult
+Scan
+  ↓
+Understand
+  ↓
+Visualize
+  ↓
+Learn
+  ↓
+Practice
+  ↓
+Track progress
 ```
 
-This design keeps the analysis reusable, IDE-independent, and easy to extend. The scanner is intentionally deterministic and does not depend on AI for core project analysis.
+1. **Scan** — inspect the open workspace locally through a deterministic analysis pipeline.
+2. **Understand** — identify languages, frameworks, infrastructure, dependencies, and likely starting files.
+3. **Visualize** — explore verified local imports and a separately labelled recommended learning path.
+4. **Learn** — generate guided explanations for important files, grounded in their real source.
+5. **Practice** — work through architectural scenarios about where changes and responsibilities belong.
+6. **Track progress** — retain explained, read, practised, and mastered file states across sessions.
 
-## Repository structure
+## Project Overview
 
-- apps/: user-facing applications such as the VS Code extension
-  - the extension contributes a TMTP Activity Bar icon and compact Learning
-    Home sidebar; the full graph, tour, and practice experience opens in an
-    editor tab only when the developer requests it
-  - vscode-extension/src/webview/graph/: the Interactive Project Graph — the
-    only React code in the repo, isolated to this one screen
-- packages/: reusable core packages
-  - scanner/: the deterministic project analysis engine (no AI dependency) —
-    now also the source of the deterministic `projectGraph.edges` relationships
-  - ai/: the AI provider abstraction, prompt, and response validation — depends
-    on scanner's types only, never the reverse
-  - shared/: shared contracts and utilities
-- examples/: minimal real-world golden projects used as long-term integration fixtures
-- docs/: architecture, development, and roadmap documentation
+**The problem:** An unfamiliar repository does not provide a concise map of its technology and structure.
 
-## Golden projects
+**What TMTP does:** The Project Overview streams six analysis stages and summarizes files, folders, manifests, detected languages, frameworks, infrastructure, dependencies, and top file types. Detection results include confidence and the repository signals behind them.
 
-The examples directory contains minimal but realistic projects that act as long-term integration fixtures.
+**Why it matters:** You get an evidence-based first orientation without sending the repository to an AI service.
 
-Current projects include:
+Detection is heuristic rather than a full semantic build-system analysis. See [supported analysis](#supported-analysis) for the current scope.
 
-- FastAPI
-- React
-- NestJS
-- Django
-- Spring Boot
+## Where Should I Start?
 
-## Testing
+**The problem:** Real projects often have several meaningful entry points, especially monorepos and applications with separate frontend, backend, CLI, or service layers.
 
-The scanner includes integration tests for each golden project (including the
-deterministic project-graph edges); the ai package has unit tests for `FileLesson`/
-`PracticePlan` response validation and the OpenAI provider (against a mocked
-network layer — no real API key needed); the vscode-extension package tests the
-graph view-model and layout algorithm directly, plus the actual React Flow
-canvas mounted in a real DOM via jsdom (verifying render, click-to-select, and
-the clutter-filter toggle all actually work, not just that the code compiles).
+**What TMTP does:** It ranks source files using deterministic signals such as executable entry points, framework bootstraps, conventional filenames, import centrality, reverse references, and orchestration behavior. Every recommendation includes the reasons it received its position.
 
-Current status:
+**Why it matters:** Instead of opening files at random, you begin with a reviewable learning order derived from the repository itself. No AI is involved in this ranking.
 
-- 128 scanner integration tests
-- 23 ai package tests
-- 20 vscode-extension tests
-- 0 failures
+## Interactive Project Graph
 
-## Running the project
+**The problem:** A directory tree hides how source files relate, while a dense dependency graph can become as difficult to read as the codebase itself.
+
+**What TMTP does:** The graph combines:
+
+- verified project-local imports shown as solid relationships;
+- a separately labelled, deterministic recommended lesson sequence;
+- **Core**, **Related**, and **All files** scopes;
+- search, zoom, pan, fit-to-screen, and a project overview;
+- incoming **used by** and outgoing **uses** highlighting;
+- per-file importance, learning rationale, and progress.
+
+**Why it matters:** You can distinguish how code is connected from how it may be useful to learn it. TMTP never presents a teaching relationship as a code dependency.
+
+Import extraction currently covers TypeScript/JavaScript relative imports and resolvable project-local Python imports. Other languages can still appear as files and starting points, but their import graphs may be sparse.
+
+## Guided Project Tour
+
+**The problem:** Knowing that a file is important does not explain its responsibility or how its code expresses the project architecture.
+
+**What TMTP does:** The tour follows the same ranked starting files one at a time. For each requested file, it provides:
+
+1. **Project Context** — what the file is responsible for, where it fits, and why it exists.
+2. **Key Constructs** — a focused set of source snippets, each explained through three lenses:
+   - its role in this project;
+   - the language construct being used;
+   - why it matters architecturally.
+
+The lesson receives the real file content, the scanner-detected primary language, and the deterministic reasons the file was recommended. Lessons are generated on demand and cached per workspace so reopening one does not repeat the same request.
+
+**Why it matters:** The repository becomes the learning material. You learn language and architecture in the context where they are actually used.
+
+AI explanations can still be imperfect. TMTP validates the response structure and grounds the request in real source, but generated prose should be reviewed against the code.
+
+## In-editor AI Commentary
+
+**The problem:** Explanations lose value when they are separated from the exact code they describe.
+
+**What TMTP does:** Generating or reopening a lesson opens the source beside TMTP and anchors collapsible native VS Code comment threads to matched snippets. Each thread contains the project role, language explanation, and architectural rationale. Read and unread state persists, while editing the source removes that file's commentary so stale annotations are not left behind.
+
+**Why it matters:** You can study the explanation at the relevant lines without modifying the source file or leaving the editor.
+
+## Learning Readiness Check
+
+**The problem:** A tour cannot know which parts felt clear and which need reinforcement.
+
+**What TMTP does:** After the Guided Tour, you rate your confidence for each file you explored. TMTP uses those ratings to weight the next practice set toward files you want to understand better.
+
+**Why it matters:** Practice responds to your own sense of readiness instead of treating every learning stop equally.
+
+This is a file-confidence check, not a formal language proficiency test or automated knowledge-gap assessment.
+
+## Day 1 Practice
+
+**The problem:** Reading an explanation does not prove you know where to begin when a real task arrives.
+
+**What TMTP does:** Day 1 Practice presents realistic multiple-choice scenarios about file responsibilities and architectural boundaries. Tour-wide practice emphasizes lower-confidence files. Focused practice is available for an individual file and tests what belongs there, what it delegates, and when a neighboring file is the better answer.
+
+The planner fixes the files, answer choices, correct answer, order, and difficulty before AI writes the scenario and feedback. AI cannot replace those deterministic choices in its response.
+
+**Why it matters:** You practise navigating the architecture rather than memorizing filenames or syntax trivia.
+
+## Progress Tracking
+
+**The problem:** Onboarding is rarely completed in one sitting.
+
+**What TMTP does:** TMTP keeps lightweight per-workspace learning state for files that are:
+
+- not visited;
+- explained, including read commentary progress;
+- practised;
+- mastered or explicitly marked as learned.
+
+The Activity Bar Learning Home and Project Graph surface that state when you return.
+
+**Why it matters:** You can resume the learning journey instead of reconstructing what you already explored.
+
+Progress is file-level and intentionally simple. TMTP does not yet maintain a broader developer skills profile.
+
+## Screenshots
+
+The public screenshot set is being prepared for the Marketplace release. Each image below has a defined purpose and intended repository path so the final documentation can be completed without changing the product story.
+
+| Planned asset | What it should demonstrate |
+|---|---|
+| `apps/vscode-extension/media/screenshots/project-graph.png` | The Core graph, verified import edges, recommended lesson path, search, legend, and learning progress. |
+| `apps/vscode-extension/media/screenshots/starting-files.png` | Ranked starting-file cards with confidence, deterministic reasons, and file actions. |
+| `apps/vscode-extension/media/screenshots/guided-tour.png` | Project Context and Key Constructs for one real file. |
+| `apps/vscode-extension/media/screenshots/editor-commentary.png` | Native collapsible commentary anchored beside the relevant source. |
+| `apps/vscode-extension/media/screenshots/day-one-practice.png` | A realistic architectural scenario with answer feedback. |
+| `apps/vscode-extension/media/screenshots/learning-home.png` | The Activity Bar entry point, project status, progress, and learning destinations. |
+
+Screenshots will be added only after they are captured from the current extension so the Marketplace page does not show mock behavior.
+
+## Privacy and data handling
+
+TMTP separates local analysis from optional AI generation.
+
+### What stays local
+
+- Repository scanning and filesystem inventory.
+- Language, framework, infrastructure, and dependency detection.
+- Starting-file ranking and its evidence.
+- Project import graph construction.
+- Learning progress and cached generated results in VS Code extension storage.
+- Your API key, stored through VS Code SecretStorage rather than `settings.json`.
+
+### What is sent to OpenAI
+
+AI is used only when you test the connection, request a file explanation, or request practice content.
+
+- A file lesson sends the selected file's path, full content, detected primary language, and starting-file reasons.
+- Practice generation sends the relevant file names and the available lesson titles/responsibility summaries, together with the deterministic scenario plan.
+- A connection test sends an authenticated request to OpenAI's models endpoint.
+
+TMTP currently connects directly from the extension host to the API provider you select: OpenAI, Anthropic Claude, or Google Gemini. It does not include a TMTP-operated proxy or backend in this repository. Your use is subject to the selected provider's account terms, policies, and API charges.
+
+## Supported analysis
+
+Current detector coverage is:
+
+| Area | Supported signals |
+|---|---|
+| Languages | Python, TypeScript, Java, Go, Rust |
+| Frameworks | FastAPI, React, NestJS, Django, Spring Boot |
+| Infrastructure | Docker, Docker Compose, GitHub Actions, Kubernetes, Terraform, Dev Containers, Nginx |
+| Dependencies | Pydantic, SQLAlchemy, React Router, Axios, JWT, Django REST Framework, Spring Security |
+| Import relationships | TypeScript/JavaScript relative imports and resolvable project-local Python imports |
+
+Detection is based on repository signals and confidence scores. It is designed for orientation, not as a replacement for a package manager, compiler, security scanner, or complete static-analysis system.
+
+## Current limitations
+
+- AI features require your own OpenAI, Anthropic, or Google AI API key and may incur provider charges.
+- The model is configurable, but compatibility depends on the selected provider's text-generation API and ability to return JSON.
+- Only the first folder in a multi-root VS Code workspace is analyzed.
+- Import relationships are currently resolved only for supported TypeScript/JavaScript and Python patterns.
+- Technology and dependency detection is heuristic rather than manifest-semantic.
+- The graph may be sparse for unsupported or ambiguous import syntax.
+- TMTP is not a general-purpose chat assistant or code generator.
+- Learning progress is file-level; developer profiles, concept-level knowledge gaps, and adaptive curricula are future work.
+- AI lessons are structurally validated and source-grounded, but generated explanations can still contain mistakes.
+
+## Installation
+
+TMTP currently targets VS Code 1.85 or newer.
+
+### Install the development release
+
+Until the public Marketplace listing is available:
+
+1. Download or build the `tmtp-0.1.0.vsix` package.
+2. In VS Code, open the Extensions view.
+3. Open the **Views and More Actions** menu (`…`).
+4. Select **Install from VSIX…** and choose the package.
+5. Open a project folder.
+6. Select the TMTP icon in the Activity Bar.
+7. Open the Project Graph, Project Overview, or **Where Should I Start?** view.
+8. Choose OpenAI, Anthropic Claude, or Google Gemini and configure its API key only when you want to use the Guided Tour or practice features.
+
+### Build from source
+
+Prerequisites: Node.js and pnpm.
 
 ```bash
 pnpm install
 pnpm build
+```
+
+<!-- git clone https://github.com/UnaStaziaBo/TMTP-project-aware-AI-mentor-for-developers.git -->
+
+Open the repository in VS Code and press `F5` with the **Run TMTP Extension** launch configuration. The Extension Development Host will open with the current build.
+
+## Development
+
+The repository is a pnpm workspace:
+
+```text
+apps/
+  vscode-extension/   VS Code integration and learning interface
+packages/
+  scanner/            Deterministic repository analysis
+  ai/                 AI provider, prompts, and response validation
+  shared/             Minimal shared package for future cross-package contracts
+examples/             Golden projects used by integration tests
+docs/                 Architecture, roadmap, and contributor guidance
+```
+
+Useful commands:
+
+```bash
+pnpm build
 pnpm --filter @tmpt/scanner test:integration
 pnpm --filter @tmpt/ai test:integration
-pnpm --filter @tmpt/vscode-extension test:integration
+pnpm --filter tmtp test:integration
 ```
+
+The current source contains 32 scanner, 28 AI, and 29 extension test cases. Network calls in the AI tests are mocked; no real API key is required.
+
+For package boundaries and design decisions, see [Architecture](docs/architecture.md). For the local development workflow, see [Development Guide](docs/development.md).
 
 ## Roadmap
 
-### Completed
+Future work is focused on:
 
-- ✅ Level 0 — Monorepo Architecture
-- ✅ Level 1 — Project Scanner
-  - Filesystem
-  - Languages
-  - Frameworks
-  - Infrastructure
-  - Dependencies
-- ✅ Starting File Discovery Engine (Milestone 2, deterministic)
-- ✅ Guided Project Tour and Practice (Milestone 3 — grounded per-file lessons,
-  native in-editor commentary, persistent learning progress, and constrained
-  architectural exercises; no general-purpose chat)
-- ✅ Interactive Learning Graph (Milestone 4 — verified scanner imports plus a clearly distinguished deterministic learning path, rendered with React Flow; a standalone `graph` package with richer code relationship types is still open)
+- richer code relationships beyond supported local imports;
+- concept usage detection grounded in source;
+- a developer profile that can represent goals and experience;
+- concept-level knowledge-gap identification;
+- adaptive learning recommendations and longer-term learning paths;
+- additional AI providers and provider-specific configuration guidance;
+- more complete automated Extension Host and release-installation testing.
 
-### Upcoming
+See the [project roadmap](docs/roadmap.md) for the longer-term architecture direction. Roadmap items are plans, not current capabilities.
 
-- 🔜 Level 2 — Project Graph (partially delivered — see Milestone 4)
-- 🔜 Level 3 — Concept Usage
-- 🔜 Level 4 — Developer Profile
-- 🔜 Level 5 — Gap Engine
-- 🔜 Level 6 — Learning Recommendation
-- 🔜 Level 7 — Explain Engine
-- 🔜 Level 8 — Learning Progress
-- 🔜 Level 9 — Today Goal
+## Contributing
 
-## Engineering principles
+TMTP is early and contributions are welcome, particularly around detector accuracy, import resolution, VS Code UX, testing, and documentation.
 
-TMTP is being built around a few core principles:
+1. Fork the repository and create a focused branch.
+2. Install dependencies with `pnpm install`.
+3. Make the smallest coherent change.
+4. Run the relevant package tests and `pnpm build`.
+5. Open a pull request that explains the user problem, implementation, and verification.
 
-- modular pipeline architecture
-- deterministic analysis before AI
-- registry-based detectors
-- evidence-based detection
-- reusable analysis engine
-- IDE-independent backend
+Before adding a public capability claim, make sure the behavior is registered, reachable through the product, and covered by an appropriate test.
 
-## Future vision
+## License
 
-The scanner is only the first component of TMTP. Over time, the project will transform raw repository analysis into a concept-aware understanding of a software project, and AI will be used only after deterministic analysis has established a reliable foundation.
+No open-source license file has been committed yet. Until the project owner selects and adds a license, the source is publicly visible but no open-source usage rights should be assumed.
+
+## Project links
+
+<!-- - [Source repository](https://github.com/UnaStaziaBo/TMTP-project-aware-AI-mentor-for-developers) -->
+<!-- - [Issue tracker](https://github.com/UnaStaziaBo/TMTP-project-aware-AI-mentor-for-developers/issues) -->
+- [Changelog](CHANGELOG.md)

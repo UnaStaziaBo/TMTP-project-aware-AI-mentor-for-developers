@@ -11,7 +11,7 @@ import {
   type PipelineStage,
   type ProjectScanResult,
 } from '@tmpt/scanner';
-import { OpenAIProvider, type FileLesson, type FileSummary, type KeyConstruct, type PracticePlan } from '@tmpt/ai';
+import { createAIProvider, type FileLesson, type FileSummary, type KeyConstruct, type PracticePlan } from '@tmpt/ai';
 import { getAIConfig, saveAIConfig } from './ai/aiConfig.js';
 import { determinePrimaryLanguage } from './languageProfile.js';
 import { buildScenarioPlan, buildSingleFileScenarioPlan } from './practicePlanner.js';
@@ -308,7 +308,7 @@ async function handleExplainFile(
   try {
     const fileContent = await fs.readFile(path.join(folder.uri.fsPath, file), 'utf8');
     const reasons = latestResult.startingFiles.find((candidate) => candidate.file === file)?.reasons ?? [];
-    const provider = new OpenAIProvider();
+    const provider = createAIProvider(stored.config.provider);
     const lesson = await provider.generateFileLesson(
       { language, file, fileContent, reasons },
       { apiKey: stored.apiKey, model: stored.config.model },
@@ -355,7 +355,7 @@ async function handleRequestFilePractice(
       return { file: f, title: lesson?.title ?? f, responsibility: lesson?.responsibility ?? '' };
     });
     const scenarios = buildSingleFileScenarioPlan(file, allFiles);
-    const provider = new OpenAIProvider();
+    const provider = createAIProvider(stored.config.provider);
     const plan = await provider.generatePracticePlan(
       { files, scenarios },
       { apiKey: stored.apiKey, model: stored.config.model },
@@ -443,7 +443,7 @@ async function handleSubmitConfidenceProfile(
       return { file, title: lesson?.title ?? file, responsibility: lesson?.responsibility ?? '' };
     });
     const scenarios = buildScenarioPlan(touredFiles, ratings);
-    const provider = new OpenAIProvider();
+    const provider = createAIProvider(stored.config.provider);
     const plan = await provider.generatePracticePlan(
       { files, scenarios },
       { apiKey: stored.apiKey, model: stored.config.model },
@@ -539,12 +539,12 @@ function openOverviewPanel(
         postLearningProgress(post);
         break;
       case 'aiTestConnection':
-        void new OpenAIProvider()
+        void createAIProvider(message.provider)
           .testConnection({ apiKey: message.apiKey, model: message.model })
           .then((result) => post({ type: 'aiTestResult', result }));
         break;
       case 'aiSaveConfig':
-        void saveAIConfig(context, 'openai', message.model, message.apiKey).then(() => {
+        void saveAIConfig(context, message.provider, message.model, message.apiKey).then(() => {
           void postAIConfigStatus(context, post);
           void refreshSidebar();
         });

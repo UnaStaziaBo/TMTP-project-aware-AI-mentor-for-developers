@@ -1,5 +1,5 @@
 import type { ProjectScanResult } from '@tmpt/scanner';
-import type { FileLesson, PracticePlan, TestConnectionResult } from '@tmpt/ai';
+import type { AIProviderId, FileLesson, PracticePlan, TestConnectionResult } from '@tmpt/ai';
 
 export type StageKey =
   | 'filesystem'
@@ -33,7 +33,7 @@ export type ExtensionMessage =
   | { type: 'scanComplete'; totalElapsedMs: number }
   | { type: 'scanError'; message: string }
   | { type: 'noWorkspace' }
-  | { type: 'aiConfigStatus'; configured: boolean; provider?: string; model?: string }
+  | { type: 'aiConfigStatus'; configured: boolean; provider?: AIProviderId; model?: string }
   | { type: 'aiTestResult'; result: TestConnectionResult }
   | { type: 'aiError'; message: string }
   | { type: 'fileLessonGenerating'; file: string }
@@ -59,8 +59,8 @@ export type ExtensionMessage =
 export type WebviewMessage =
   | { type: 'rescan' }
   | { type: 'ready' }
-  | { type: 'aiTestConnection'; apiKey: string; model: string }
-  | { type: 'aiSaveConfig'; apiKey: string; model: string }
+  | { type: 'aiTestConnection'; provider: AIProviderId; apiKey: string; model: string }
+  | { type: 'aiSaveConfig'; provider: AIProviderId; apiKey: string; model: string }
   | { type: 'openFile'; file: string }
   | { type: 'explainFile'; file: string }
   | { type: 'submitConfidenceProfile'; ratings: Record<string, FileConfidence> }

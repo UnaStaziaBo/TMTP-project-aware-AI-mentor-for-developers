@@ -1,0 +1,14 @@
+{
+  "name": "tmtp",
+  "publisher": "UnaStaziaBo",
+  "private": false,
+  "icon": "media/icon.png",
+  "preview": true,
+  "pricing": "Free",
+  "files": [
+    "dist/**",
+    "media/**",
+    "README.md",
+    "CHANGELOG.md"
+  ]
+}

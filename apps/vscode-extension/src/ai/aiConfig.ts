@@ -1,9 +1,8 @@
 import * as vscode from 'vscode';
+import type { AIProviderId } from '@tmpt/ai';
 
 const SECRET_KEY_PREFIX = 'tmtp.ai.apiKey.';
 const GLOBAL_STATE_KEY = 'tmtp.ai.config';
-
-export type AIProviderId = 'openai';
 
 export interface StoredAIConfig {
   provider: AIProviderId;

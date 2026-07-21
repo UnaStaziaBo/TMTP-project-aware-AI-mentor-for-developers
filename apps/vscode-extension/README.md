@@ -15,8 +15,9 @@ the open folder and streams results into a themed editor webview with four tabs:
   the Starting File Discovery stage, each with its confidence, the plain
   deterministic reasons it was recommended, an **Open File** button, and an
   **Explain** button that jumps straight into the Guided Tour at that file.
-- **Guided Tour** — configure an OpenAI API key (stored only in VS Code's
-  SecretStorage), then step through the same ranked starting files one at a
+- **Guided Tour** — choose OpenAI, Anthropic Claude, or Google Gemini and
+  configure its API key (stored only in VS Code's SecretStorage), then step
+  through the same ranked starting files one at a
   time. Each file's lesson is generated on demand via `@tmpt/ai`'s
   `generateFileLesson` and grounded entirely in that file's real content:
   Step 1 explains the file's project context (what it's responsible for,

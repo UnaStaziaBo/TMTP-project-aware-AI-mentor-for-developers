@@ -1,13 +1,44 @@
 {
-  "name": "@tmpt/vscode-extension",
-  "displayName": "TMTP",
-  "description": "Project-aware onboarding: visualizes what TMTP's deterministic scanner discovers about your codebase.",
-  "version": "0.1.0",
-  "private": true,
+  "name": "tmtp",
+  "publisher": "UnaStaziaBo",
+  "displayName": "TMTP - Teach Me This Project",
+  "description": "Understand a new codebase before writing your first line of code.",
+  "version": "0.1.1",
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["Other"],
+  "categories": ["Education", "Visualization", "Other"],
+  "keywords": [
+    "codebase",
+    "onboarding",
+    "software architecture",
+    "repository",
+    "code understanding",
+    "developer learning",
+    "project graph",
+    "ai",
+    "education",
+    "visualization",
+    "code exploration",
+    "code navigation",
+    "learning path",
+    "guided tour",
+    "project analysis"
+  ],
+  "preview": true,
+  "pricing": "Free",
+  "galleryBanner": {
+    "color": "#0B1020",
+    "theme": "dark"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/UnaStaziaBo/TMTP-project-aware-AI-mentor-for-developers.git"
+  },
+  "homepage": "https://github.com/UnaStaziaBo/TMTP-project-aware-AI-mentor-for-developers#readme",
+  "bugs": {
+    "url": "https://github.com/UnaStaziaBo/TMTP-project-aware-AI-mentor-for-developers/issues"
+  },
   "main": "./dist/extension.js",
   "activationEvents": ["onStartupFinished"],
   "contributes": {

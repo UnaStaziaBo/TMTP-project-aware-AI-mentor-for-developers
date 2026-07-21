@@ -69,7 +69,7 @@ export class TmtpSidebarProvider implements vscode.WebviewViewProvider {
       <div class="section"><div class="section-title">Learning workspace</div>
         <button data-tab="projectGraph">Project Graph</button><button data-tab="overview">Project Overview</button><button data-tab="startingFiles">Where Should I Start?</button><button data-tab="guidedTour">Guided Tour</button>
       </div><div class="status">AI provider: ${s.aiConfigured ? 'Configured' : 'Not configured'}</div>
-      <button data-action="configure-ai">⚙ Change API Key</button>
+      <button data-action="configure-ai">⚙ Change AI Provider</button>
       <script nonce="${nonce}">const vscode=acquireVsCodeApi();document.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',()=>vscode.postMessage({type:'open',tab:b.dataset.tab})));document.querySelector('[data-action="configure-ai"]')?.addEventListener('click',()=>vscode.postMessage({type:'configureAI'}));document.querySelector('[data-action="practice"]')?.addEventListener('click',()=>vscode.postMessage({type:'practice'}));</script>
       </body></html>`;
   }
