@@ -1,0 +1,103 @@
+{
+  "name": "tmtp",
+  "publisher": "UnaStaziaBo",
+  "displayName": "TMTP - Teach Me This Project",
+  "description": "Understand a new codebase before writing your first line of code.",
+  "version": "0.1.1",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Education",
+    "Visualization",
+    "Other"
+  ],
+  "keywords": [
+    "codebase",
+    "onboarding",
+    "software architecture",
+    "repository",
+    "code understanding",
+    "developer learning",
+    "project graph",
+    "ai",
+    "education",
+    "visualization",
+    "code exploration",
+    "code navigation",
+    "learning path",
+    "guided tour",
+    "project analysis"
+  ],
+  "preview": true,
+  "pricing": "Free",
+  "galleryBanner": {
+    "color": "#0B1020",
+    "theme": "dark"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/UnaStaziaBo/TMTP-project-aware-AI-mentor-for-developers.git"
+  },
+  "homepage": "https://github.com/UnaStaziaBo/TMTP-project-aware-AI-mentor-for-developers#readme",
+  "bugs": {
+    "url": "https://github.com/UnaStaziaBo/TMTP-project-aware-AI-mentor-for-developers/issues"
+  },
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "tmtp",
+          "title": "TMTP",
+          "icon": "media/tmtp.svg"
+        }
+      ]
+    },
+    "views": {
+      "tmtp": [
+        {
+          "id": "tmtp.home",
+          "name": "Learning Home",
+          "type": "webview"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "tmtp.showOverview",
+        "title": "TMTP: Show Project Overview"
+      },
+      {
+        "command": "tmtp.hideAICommentary",
+        "title": "TMTP: Hide AI Commentary"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "node ./scripts/build.mjs",
+    "check": "tsc --noEmit -p tsconfig.json",
+    "test:integration": "node --import tsx --test tests/**/*.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.1",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "0.21.5",
+    "jsdom": "^25.0.1",
+    "tsx": "^4.22.4",
+    "typescript": "^5.6.3"
+  },
+  "private": false,
+  "icon": "media/icon.png",
+  "files": [
+    "dist/**",
+    "media/**",
+    "README.md",
+    "CHANGELOG.md"
+  ]
+}
