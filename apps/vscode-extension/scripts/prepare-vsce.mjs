@@ -21,6 +21,15 @@ try {
     path.join(root, "README.md"),
     path.join(release, "README.md")
   );
+  const releaseReadme = path.join(release, "README.md");
+  const readme = await readFile(releaseReadme, "utf8");
+  await writeFile(
+    releaseReadme,
+    readme.replace(
+      "apps/vscode-extension/media/video/TMTPshort.gif",
+      "media/video/TMTPshort.gif"
+    )
+  );
 } catch {}
 
 try {

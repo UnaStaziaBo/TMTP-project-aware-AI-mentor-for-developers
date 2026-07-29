@@ -4,6 +4,13 @@ All notable changes to TMTP will be documented in this file.
 
 The project currently uses semantic versioning for its packages and VS Code extension. This changelog begins with the first packaged public preview; earlier repository history remains available through Git.
 
+## Unreleased
+
+### Added
+
+- Anthropic Claude and Google Gemini as alternatives to OpenAI for guided lessons and practice generation.
+- Provider selection, provider-specific default models, connection testing, and separately stored API keys in the AI settings screen.
+
 ## [0.1.0] — Public preview
 
 ### Added
@@ -25,7 +32,6 @@ The project currently uses semantic versioning for its packages and VS Code exte
 
 ### Current limitations
 
-- OpenAI is the only implemented AI provider.
 - Multi-root workspaces analyze only the first workspace folder.
 - Import graph extraction is limited to supported TypeScript/JavaScript and Python patterns.
 - Technology and dependency detection is heuristic.

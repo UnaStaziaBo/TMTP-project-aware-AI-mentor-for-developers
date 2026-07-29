@@ -190,7 +190,7 @@ AI is used only when you test the connection, request a file explanation, or req
 - Practice generation sends the relevant file names and the available lesson titles/responsibility summaries, together with the deterministic scenario plan.
 - A connection test sends an authenticated request to OpenAI's models endpoint.
 
-TMTP currently connects directly from the extension host to the OpenAI API. It does not include a TMTP-operated proxy or backend in this repository. Your use of OpenAI is subject to your OpenAI account, policies, and API charges.
+TMTP currently connects directly from the extension host to the API provider you select: OpenAI, Anthropic Claude, or Google Gemini. It does not include a TMTP-operated proxy or backend in this repository. Your use is subject to the selected provider's account terms, policies, and API charges.
 
 ## Supported analysis
 
@@ -208,9 +208,8 @@ Detection is based on repository signals and confidence scores. It is designed f
 
 ## Current limitations
 
-- OpenAI is the only implemented AI provider.
-- AI features require your own OpenAI API key and may incur API charges.
-- The model is configurable, but compatibility depends on support for the Chat Completions API and JSON-object responses.
+- AI features require your own OpenAI, Anthropic, or Google AI API key and may incur provider charges.
+- The model is configurable, but compatibility depends on the selected provider's text-generation API and ability to return JSON.
 - Only the first folder in a multi-root VS Code workspace is analyzed.
 - Import relationships are currently resolved only for supported TypeScript/JavaScript and Python patterns.
 - Technology and dependency detection is heuristic rather than manifest-semantic.
@@ -234,7 +233,7 @@ Until the public Marketplace listing is available:
 5. Open a project folder.
 6. Select the TMTP icon in the Activity Bar.
 7. Open the Project Graph, Project Overview, or **Where Should I Start?** view.
-8. Configure an OpenAI API key only when you want to use the Guided Tour or practice features.
+8. Choose OpenAI, Anthropic Claude, or Google Gemini and configure its API key only when you want to use the Guided Tour or practice features.
 
 ### Build from source
 
@@ -273,7 +272,7 @@ pnpm --filter @tmpt/ai test:integration
 pnpm --filter tmtp test:integration
 ```
 
-The current source contains 32 scanner, 23 AI, and 29 extension test cases. Network calls in the AI tests are mocked; no real API key is required.
+The current source contains 32 scanner, 28 AI, and 29 extension test cases. Network calls in the AI tests are mocked; no real API key is required.
 
 For package boundaries and design decisions, see [Architecture](docs/architecture.md). For the local development workflow, see [Development Guide](docs/development.md).
 
@@ -286,7 +285,7 @@ Future work is focused on:
 - a developer profile that can represent goals and experience;
 - concept-level knowledge-gap identification;
 - adaptive learning recommendations and longer-term learning paths;
-- broader AI-provider support;
+- additional AI providers and provider-specific configuration guidance;
 - more complete automated Extension Host and release-installation testing.
 
 See the [project roadmap](docs/roadmap.md) for the longer-term architecture direction. Roadmap items are plans, not current capabilities.
