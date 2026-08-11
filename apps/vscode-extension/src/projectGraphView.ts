@@ -31,6 +31,9 @@ export interface GraphEdgeView {
   source: string;
   target: string;
   kind?: 'import' | 'learning';
+  /** Count and source pairs are retained when a collapsed group summarizes real imports. */
+  underlyingEdgeCount?: number;
+  underlyingFiles?: Array<[string, string]>;
 }
 
 export interface ProjectGraphViewModel {

@@ -11,9 +11,18 @@ import {
 } from '@xyflow/react';
 import { layoutProjectGraph, type LayoutResult } from './layout.js';
 import { FILE_NODE_TYPES, type FileFlowNode } from './FileNode.js';
+import { GROUP_NODE_TYPES, type GroupFlowNode } from './GroupNode.js';
 import { ROUTED_EDGE_TYPES, type RoutedEdgeData } from './RoutedEdge.js';
 import { buildSmoothPath } from './edgePath.js';
 import type { GraphEdgeView, GraphNodeView } from '../../projectGraphView.js';
+import {
+  buildRepositoryHierarchy,
+  expansionForFile,
+  initialExpandedGroups,
+  projectVisibleGraph,
+  DIRECT_FILE_THRESHOLD,
+  type GraphGroupView,
+} from './repositoryHierarchy.js';
 
 export interface ProjectGraphCanvasProps {
   nodes: GraphNodeView[];
@@ -77,7 +86,17 @@ function GraphInner({ nodes, edges, selectedFile, onSelectFile }: ProjectGraphCa
   const [hoveredFile, setHoveredFile] = useState<string | null>(null);
   const [layout, setLayout] = useState<LayoutResult>(EMPTY_LAYOUT);
   const [isLayouting, setIsLayouting] = useState(true);
+  const [pendingFocusFile, setPendingFocusFile] = useState<string | null>(null);
   const { fitView } = useReactFlow();
+  // The webview parent may recreate view-model arrays during unrelated UI
+  // updates. Expansion belongs to the repository shape, not array identity.
+  const hierarchySignature = nodes.map((node) => node.file).sort((a, b) => a.localeCompare(b)).join('\u0000');
+  const hierarchy = useMemo(() => buildRepositoryHierarchy(nodes), [hierarchySignature]);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => initialExpandedGroups(hierarchy));
+
+  useEffect(() => {
+    setExpandedGroups(initialExpandedGroups(hierarchy));
+  }, [hierarchy]);
 
   const coreFiles = useMemo(() => {
     const degree = new Map<string, number>();
@@ -148,7 +167,7 @@ function GraphInner({ nodes, edges, selectedFile, onSelectFile }: ProjectGraphCa
     [learningOrder],
   );
 
-  const visibleNodes = useMemo(
+  const scopedNodes = useMemo(
     () => {
       const query = search.trim().toLowerCase();
       return nodes.filter((node) => {
@@ -169,10 +188,16 @@ function GraphInner({ nodes, edges, selectedFile, onSelectFile }: ProjectGraphCa
     return new Set(nodes.filter((node) => node.file.toLowerCase().includes(query)).map((node) => node.file));
   }, [nodes, search]);
 
-  const visibleFileSet = useMemo(() => new Set(visibleNodes.map((node) => node.file)), [visibleNodes]);
-  const visibleEdges = useMemo(
-    () => edges.filter((edge) => visibleFileSet.has(edge.source) && visibleFileSet.has(edge.target)),
-    [edges, visibleFileSet],
+  const scopedFileSet = useMemo(() => new Set(scopedNodes.map((node) => node.file)), [scopedNodes]);
+  // Core and Related are already intentionally small teaching subsets. Keep
+  // their established file-card behavior instead of adding folder clicks.
+  const effectiveExpandedGroups = useMemo(
+    () => scopedFileSet.size <= DIRECT_FILE_THRESHOLD ? new Set(hierarchy.groups.keys()) : expandedGroups,
+    [scopedFileSet, hierarchy, expandedGroups],
+  );
+  const projection = useMemo(
+    () => projectVisibleGraph(hierarchy, nodes, edges, scopedFileSet, effectiveExpandedGroups),
+    [hierarchy, nodes, edges, scopedFileSet, effectiveExpandedGroups],
   );
 
   const layoutEdges = useMemo(() => {
@@ -180,12 +205,12 @@ function GraphInner({ nodes, edges, selectedFile, onSelectFile }: ProjectGraphCa
     for (let index = 1; index < learningOrder.length; index += 1) {
       const source = learningOrder[index - 1]!.file;
       const target = learningOrder[index]!.file;
-      if (visibleFileSet.has(source) && visibleFileSet.has(target)) {
+      if (projection.entityByFile.get(source) === source && projection.entityByFile.get(target) === target) {
         learningEdges.push({ id: `learn:${source}=>${target}`, source, target, kind: 'learning' });
       }
     }
-    return [...visibleEdges, ...learningEdges];
-  }, [visibleEdges, learningOrder, visibleFileSet]);
+    return [...projection.edges, ...learningEdges];
+  }, [projection, learningOrder]);
 
   // Recomputing the layout only when the *visible set* changes (mount,
   // "Show more files", etc.) — never merely when a node is selected — is
@@ -196,28 +221,43 @@ function GraphInner({ nodes, edges, selectedFile, onSelectFile }: ProjectGraphCa
     let cancelled = false;
     setIsLayouting(true);
 
-    void layoutProjectGraph(visibleNodes, layoutEdges).then((result) => {
+    void layoutProjectGraph(projection.nodes, layoutEdges).then((result) => {
       if (cancelled) return;
       setLayout(result);
       setIsLayouting(false);
-      requestAnimationFrame(() => void fitView(FIT_VIEW_OPTIONS));
+      requestAnimationFrame(() => {
+        if (pendingFocusFile && result.nodes.some((node) => node.file === pendingFocusFile)) {
+          void fitView({ nodes: [{ id: pendingFocusFile }], duration: 400, maxZoom: 1.2, padding: 0.3 });
+          setPendingFocusFile(null);
+        } else {
+          void fitView(FIT_VIEW_OPTIONS);
+        }
+      });
     });
 
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleNodes, layoutEdges]);
+  }, [projection.nodes, layoutEdges, pendingFocusFile]);
 
-  const flowNodes: FileFlowNode[] = useMemo(
+  const flowNodes: Array<FileFlowNode | GroupFlowNode> = useMemo(
     () =>
       layout.nodes.map((node) => ({
         id: node.file,
-        type: 'file',
+        type: (node as GraphGroupView).entityType === 'group' ? 'group' : 'file',
         position: { x: node.x, y: node.y },
         selected: node.file === selectedFile,
         style: { width: node.width, height: node.height },
-        data: {
+        data: (node as GraphGroupView).entityType === 'group'
+          ? {
+              path: (node as GraphGroupView).groupPath,
+              kind: (node as GraphGroupView).groupKind,
+              fileCount: (node as GraphGroupView).fileCount,
+              expanded: false,
+              onToggle: (path: string) => setExpandedGroups((current) => new Set([...current, path])),
+            }
+          : {
           file: node.file,
           title: node.title,
           area: node.area,
@@ -229,7 +269,7 @@ function GraphInner({ nodes, edges, selectedFile, onSelectFile }: ProjectGraphCa
           learningStep: learningStepByFile.get(node.file),
           learningReason: node.learningReason ?? 'Useful supporting project file',
           dimmed: searchMatches !== null && !searchMatches.has(node.file),
-        },
+            },
       })),
     [layout.nodes, selectedFile, searchMatches, learningStepByFile],
   );
@@ -272,9 +312,11 @@ function GraphInner({ nodes, edges, selectedFile, onSelectFile }: ProjectGraphCa
     <ReactFlow
       nodes={flowNodes}
       edges={flowEdges}
-      nodeTypes={FILE_NODE_TYPES}
+      nodeTypes={{ ...FILE_NODE_TYPES, ...GROUP_NODE_TYPES }}
       edgeTypes={ROUTED_EDGE_TYPES}
-      onNodeClick={(_event, node) => onSelectFile(node.id)}
+      onNodeClick={(_event, node) => {
+        if (!node.id.startsWith('group:')) onSelectFile(node.id);
+      }}
       onNodeMouseEnter={(_event, node) => setHoveredFile(node.id)}
       onNodeMouseLeave={() => setHoveredFile(null)}
       minZoom={0.1}
@@ -290,7 +332,16 @@ function GraphInner({ nodes, edges, selectedFile, onSelectFile }: ProjectGraphCa
           type="text"
           placeholder="Search files…"
           value={search}
-          onChange={(event) => setSearch(event.target.value)}
+          onChange={(event) => {
+            const next = event.target.value;
+            setSearch(next);
+            const match = nodes.find((node) => node.file.toLowerCase().includes(next.trim().toLowerCase()));
+            if (match && next.trim()) {
+              setScope('all');
+              setExpandedGroups((current) => new Set([...current, ...expansionForFile(hierarchy, match.file)]));
+              setPendingFocusFile(match.file);
+            }
+          }}
           onKeyDown={(event) => {
             if (event.key === 'Enter' && searchMatches && searchMatches.size > 0) {
               focusFile([...searchMatches][0]!);
@@ -324,6 +375,22 @@ function GraphInner({ nodes, edges, selectedFile, onSelectFile }: ProjectGraphCa
           Fit to Screen
         </button>
       </Panel>
+      {[...expandedGroups].filter(Boolean).length > 0 ? (
+        <Panel position="bottom-center" className="graph-expanded-panel">
+          {[...expandedGroups]
+            .filter(Boolean)
+            .sort((a, b) => a.localeCompare(b))
+            .map((path) => (
+              <button key={path} className="ai-link-button" onClick={() => setExpandedGroups((current) => {
+                const next = new Set(current);
+                next.delete(path);
+                return next;
+              })}>
+                Collapse {path}
+              </button>
+            ))}
+        </Panel>
+      ) : null}
       <Panel position="bottom-left" className="graph-legend-panel">
         <strong>Relationships</strong>
         <span className="graph-legend-learning">- -→ recommended next lesson</span>

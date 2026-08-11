@@ -949,6 +949,54 @@ body.graph-mode #root {
   transition: border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
 }
 
+.graph-group-node {
+  width: 230px;
+  min-height: 112px;
+  box-sizing: border-box;
+  border: 1px solid var(--vscode-charts-purple, var(--vscode-focusBorder));
+  border-left: 4px solid var(--vscode-charts-purple, var(--vscode-focusBorder));
+  border-radius: 8px;
+  padding: 14px;
+  background: var(--vscode-editorWidget-background);
+  color: var(--vscode-foreground);
+  cursor: pointer;
+  outline: none;
+}
+
+.graph-group-node:hover,
+.graph-group-node:focus-visible {
+  border-color: var(--vscode-focusBorder);
+  box-shadow: 0 0 0 1px var(--vscode-focusBorder);
+}
+
+.graph-group-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.graph-group-kind {
+  margin-top: 9px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.graph-group-count {
+  margin-top: 6px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+}
+
+.graph-expanded-panel {
+  display: flex;
+  gap: 6px;
+  max-width: 70vw;
+  flex-wrap: wrap;
+}
+
 .graph-node:hover {
   border-color: var(--vscode-focusBorder);
 }
