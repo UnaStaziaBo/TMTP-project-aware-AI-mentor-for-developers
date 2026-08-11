@@ -37,6 +37,31 @@ function toPoint(point: { x: number; y: number }): Point {
   return { x: point.x, y: point.y };
 }
 
+function routeLearningEdge(
+  edge: GraphEdgeView,
+  nodesByFile: Map<string, PositionedGraphNode>,
+): RoutedGraphEdge | null {
+  const source = nodesByFile.get(edge.source);
+  const target = nodesByFile.get(edge.target);
+  if (!source || !target) return null;
+
+  // Learning-path links are an existing visual overlay, not project
+  // dependencies. Route them after hierarchy placement so they remain
+  // visible without changing ranks or connecting isolated components.
+  const sourceCenterX = source.x + source.width / 2;
+  const targetCenterX = target.x + target.width / 2;
+  const flowsDown = target.y >= source.y;
+  const start = { x: sourceCenterX, y: flowsDown ? source.y + source.height : source.y };
+  const end = { x: targetCenterX, y: flowsDown ? target.y : target.y + target.height };
+  const middleY = (start.y + end.y) / 2;
+  return {
+    id: edge.id,
+    source: edge.source,
+    target: edge.target,
+    points: [start, { x: sourceCenterX, y: middleY }, { x: targetCenterX, y: middleY }, end],
+  };
+}
+
 /**
  * Deterministic hierarchical layout via ELK's layered (Sugiyama-style)
  * algorithm: dependency edges flow top-to-bottom, so files many others
@@ -55,8 +80,14 @@ export async function layoutProjectGraph(
     return { nodes: [], edges: [] };
   }
 
-  const nodeIds = new Set(nodes.map((node) => node.file));
-  const validEdges = edges.filter((edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target));
+  const sortedNodes = [...nodes].sort((a, b) => a.file.localeCompare(b.file));
+  const nodeIds = new Set(sortedNodes.map((node) => node.file));
+  const dependencyEdges = edges
+    .filter((edge) => edge.kind !== 'learning' && nodeIds.has(edge.source) && nodeIds.has(edge.target))
+    .sort((a, b) => a.id.localeCompare(b.id));
+  const learningEdges = edges
+    .filter((edge) => edge.kind === 'learning' && nodeIds.has(edge.source) && nodeIds.has(edge.target))
+    .sort((a, b) => a.id.localeCompare(b.id));
 
   const graph: ElkNode = {
     id: 'root',
@@ -83,12 +114,12 @@ export async function layoutProjectGraph(
       'elk.separateConnectedComponents': 'true',
       'elk.spacing.componentComponent': '90',
     },
-    children: nodes.map((node) => ({
+    children: sortedNodes.map((node) => ({
       id: node.file,
       width: NODE_WIDTH,
       height: NODE_HEIGHT,
     })),
-    edges: validEdges.map((edge) => ({
+    edges: dependencyEdges.map((edge) => ({
       id: edge.id,
       sources: [edge.source],
       targets: [edge.target],
@@ -98,16 +129,20 @@ export async function layoutProjectGraph(
   const result = await elk.layout(graph);
   const positionByFile = new Map((result.children ?? []).map((child) => [child.id, child]));
 
-  const positionedNodes: PositionedGraphNode[] = nodes.map((node) => {
+  const positionedByFile = new Map<string, PositionedGraphNode>();
+  for (const node of sortedNodes) {
     const placed = positionByFile.get(node.file);
-    return {
+    positionedByFile.set(node.file, {
       ...node,
       width: NODE_WIDTH,
       height: NODE_HEIGHT,
       x: placed?.x ?? 0,
       y: placed?.y ?? 0,
-    };
-  });
+    });
+  }
+  // Preserve the caller's view ordering; positions themselves are based on
+  // the sorted input above.
+  const positionedNodes = nodes.map((node) => positionedByFile.get(node.file)!);
 
   const routedEdges: RoutedGraphEdge[] = [];
   for (const elkEdge of (result.edges ?? []) as ElkExtendedEdge[]) {
@@ -122,5 +157,10 @@ export async function layoutProjectGraph(
     });
   }
 
-  return { nodes: positionedNodes, edges: routedEdges };
+  for (const edge of learningEdges) {
+    const routed = routeLearningEdge(edge, positionedByFile);
+    if (routed) routedEdges.push(routed);
+  }
+
+  return { nodes: positionedNodes, edges: routedEdges.sort((a, b) => a.id.localeCompare(b.id)) };
 }

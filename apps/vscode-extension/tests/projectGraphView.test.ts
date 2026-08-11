@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { scanProject } from '@tmpt/scanner';
+import type { ProjectScanResult } from '@tmpt/scanner';
 import { buildProjectGraphViewModel } from '../src/projectGraphView.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -10,6 +11,20 @@ const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '../../..');
 
 const notVisited = () => ({ icon: '⚪', label: 'Not visited' });
+
+function scanResult(files: string[], edges: Array<{ from: string; to: string }> = []): ProjectScanResult {
+  return {
+    files: files.map((file) => ({ path: file, extension: path.extname(file), size: 1 })),
+    folders: [],
+    manifests: [],
+    languages: [],
+    frameworks: [],
+    infrastructure: [],
+    dependencies: [],
+    startingFiles: [],
+    projectGraph: { edges },
+  };
+}
 
 describe('buildProjectGraphViewModel', () => {
   it('includes an edge for a real relative import in react-demo', async () => {
@@ -39,6 +54,30 @@ describe('buildProjectGraphViewModel', () => {
     const model = buildProjectGraphViewModel(result, notVisited, { includeAll: true });
     assert.equal(model.hiddenCount, 0);
     assert.equal(model.nodes.length, result.files.length);
+  });
+
+  it('represents every eligible file in an edgeless complete view', () => {
+    const model = buildProjectGraphViewModel(
+      scanResult(['utils.py', 'hello.py', 'config.py']),
+      notVisited,
+      { includeAll: true },
+    );
+
+    assert.deepEqual(model.nodes.map((node) => node.file), ['config.py', 'hello.py', 'utils.py']);
+    assert.deepEqual(model.edges, []);
+    assert.equal(model.hiddenCount, 0);
+  });
+
+  it('keeps isolated files when only some files participate in verified relationships', () => {
+    const model = buildProjectGraphViewModel(
+      scanResult(['index.ts', 'utils.ts', 'constants.ts'], [{ from: 'index.ts', to: 'utils.ts' }]),
+      notVisited,
+      { includeAll: true },
+    );
+
+    assert.equal(model.nodes.length, 3);
+    assert.ok(model.nodes.some((node) => node.file === 'constants.ts' && !node.hasEdge));
+    assert.deepEqual(model.edges.map((edge) => edge.id), ['index.ts=>utils.ts']);
   });
 
   it('never fabricates an edge to or from a node outside the view model', async () => {

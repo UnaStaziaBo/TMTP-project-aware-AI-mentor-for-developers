@@ -56,6 +56,80 @@ describe('layoutProjectGraph', () => {
     assert.equal(typeof positioned[0]!.y, 'number');
   });
 
+  it('arranges multiple edgeless files deterministically without overlap', async () => {
+    const nodes = [node('utils.py'), node('hello.py'), node('config.py')];
+    const first = await layoutProjectGraph(nodes, []);
+    const second = await layoutProjectGraph([...nodes].reverse(), []);
+
+    assert.deepEqual(
+      first.nodes
+        .map((placed) => [placed.file, { x: placed.x, y: placed.y }])
+        .sort(([left], [right]) => left.localeCompare(right)),
+      second.nodes
+        .map((placed) => [placed.file, { x: placed.x, y: placed.y }])
+        .sort(([left], [right]) => left.localeCompare(right)),
+    );
+    for (let i = 0; i < first.nodes.length; i += 1) {
+      for (let j = i + 1; j < first.nodes.length; j += 1) {
+        assert.ok(!rectsOverlap(first.nodes[i]!, first.nodes[j]!));
+      }
+    }
+  });
+
+  it('keeps a branching dependency graph in stable hierarchical ranks', async () => {
+    const nodes = ['a.ts', 'b.ts', 'c.ts', 'd.ts'].map(node);
+    const edges = [
+      { id: 'a=>b', source: 'a.ts', target: 'b.ts' },
+      { id: 'a=>c', source: 'a.ts', target: 'c.ts' },
+      { id: 'b=>d', source: 'b.ts', target: 'd.ts' },
+      { id: 'c=>d', source: 'c.ts', target: 'd.ts' },
+    ];
+    const { nodes: positioned } = await layoutProjectGraph(nodes, edges);
+    const byFile = new Map(positioned.map((placed) => [placed.file, placed]));
+
+    assert.ok(byFile.get('a.ts')!.y < byFile.get('b.ts')!.y);
+    assert.equal(byFile.get('b.ts')!.y, byFile.get('c.ts')!.y);
+    assert.ok(byFile.get('b.ts')!.y < byFile.get('d.ts')!.y);
+  });
+
+  it('lays out cycles without recursion or unstable output', async () => {
+    const nodes = ['a.ts', 'b.ts', 'c.ts'].map(node);
+    const edges = [
+      { id: 'a=>b', source: 'a.ts', target: 'b.ts' },
+      { id: 'b=>c', source: 'b.ts', target: 'c.ts' },
+      { id: 'c=>a', source: 'c.ts', target: 'a.ts' },
+    ];
+    const first = await layoutProjectGraph(nodes, edges);
+    const second = await layoutProjectGraph(nodes, edges);
+
+    assert.equal(first.nodes.length, 3);
+    assert.equal(first.edges.length, 3);
+    assert.deepEqual(first, second);
+  });
+
+  it('does not let learning-path overlay edges affect dependency ranks', async () => {
+    const nodes = [node('a.ts'), node('b.ts'), node('isolated.ts')];
+    const dependencies = [{ id: 'a=>b', source: 'a.ts', target: 'b.ts', kind: 'import' as const }];
+    const withLearning = [
+      ...dependencies,
+      { id: 'learn:a=>isolated', source: 'a.ts', target: 'isolated.ts', kind: 'learning' as const },
+    ];
+    const base = await layoutProjectGraph(nodes, dependencies);
+    const overlay = await layoutProjectGraph(nodes, withLearning);
+    const baseByFile = new Map(base.nodes.map((placed) => [placed.file, placed]));
+    const overlayByFile = new Map(overlay.nodes.map((placed) => [placed.file, placed]));
+
+    assert.deepEqual(
+      { x: overlayByFile.get('a.ts')!.x, y: overlayByFile.get('a.ts')!.y },
+      { x: baseByFile.get('a.ts')!.x, y: baseByFile.get('a.ts')!.y },
+    );
+    assert.deepEqual(
+      { x: overlayByFile.get('b.ts')!.x, y: overlayByFile.get('b.ts')!.y },
+      { x: baseByFile.get('b.ts')!.x, y: baseByFile.get('b.ts')!.y },
+    );
+    assert.ok(overlay.edges.some((edge) => edge.id === 'learn:a=>isolated'));
+  });
+
   it('returns an empty layout for an empty graph', async () => {
     const result = await layoutProjectGraph([], []);
     assert.deepEqual(result, { nodes: [], edges: [] });

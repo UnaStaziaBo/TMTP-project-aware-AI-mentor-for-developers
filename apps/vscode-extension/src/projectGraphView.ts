@@ -82,38 +82,50 @@ export function buildProjectGraphViewModel(
     filesWithEdges.add(edge.to);
   }
 
-  const allNodes: GraphNodeView[] = result.files.map((file) => {
-    const candidate = candidateByFile.get(file.path);
-    const confidence = candidate?.confidence ?? 0;
-    const learningStatus = learningStatusFor(file.path);
-    return {
-      file: file.path,
-      title: file.path.split('/').pop() ?? file.path,
-      area: deriveProjectArea(file.path),
-      description: deriveShortDescription(file.path, candidate?.reasons ?? []),
-      score: candidate?.score ?? 0,
-      confidence,
-      tier: importanceTier(confidence),
-      learningStatus,
-      learningProgress: learningStatus.progress ?? 0,
-      hasEdge: filesWithEdges.has(file.path),
-      isAuxiliary: isAuxiliaryFile(file.path),
-      learningReason:
-        candidate?.reasons[0] ??
-        (filesWithEdges.has(file.path)
-          ? 'Connected to other project source files'
-          : 'Supporting project file'),
-    };
-  });
+  // Filesystem discovery is authoritative for the node universe. Sort the
+  // presentation copy so a filesystem's traversal order cannot make the
+  // graph's otherwise deterministic layout jump between scans.
+  const allNodes: GraphNodeView[] = [...result.files]
+    .sort((a, b) => a.path.localeCompare(b.path))
+    .map((file) => {
+      const candidate = candidateByFile.get(file.path);
+      const confidence = candidate?.confidence ?? 0;
+      const learningStatus = learningStatusFor(file.path);
+      return {
+        file: file.path,
+        title: file.path.split('/').pop() ?? file.path,
+        area: deriveProjectArea(file.path),
+        description: deriveShortDescription(file.path, candidate?.reasons ?? []),
+        score: candidate?.score ?? 0,
+        confidence,
+        tier: importanceTier(confidence),
+        learningStatus,
+        learningProgress: learningStatus.progress ?? 0,
+        hasEdge: filesWithEdges.has(file.path),
+        isAuxiliary: isAuxiliaryFile(file.path),
+        learningReason:
+          candidate?.reasons[0] ??
+          (filesWithEdges.has(file.path)
+            ? 'Connected to other project source files'
+            : 'Supporting project file'),
+      };
+    });
 
   const visibleNodes = options.includeAll
     ? allNodes
     : allNodes.filter((node) => node.confidence > 0 || node.hasEdge);
 
   const visibleFiles = new Set(visibleNodes.map((node) => node.file));
-  const edges: GraphEdgeView[] = result.projectGraph.edges
-    .filter((edge) => visibleFiles.has(edge.from) && visibleFiles.has(edge.to))
-    .map((edge) => ({ id: `${edge.from}=>${edge.to}`, source: edge.from, target: edge.to, kind: 'import' as const }));
+  const edgeById = new Map<string, GraphEdgeView>();
+  for (const edge of result.projectGraph.edges) {
+    if (!visibleFiles.has(edge.from) || !visibleFiles.has(edge.to)) continue;
+    const id = `${edge.from}=>${edge.to}`;
+    // The scanner normally emits unique edges, but keeping the view model
+    // idempotent prevents duplicate visual relationships if an upstream
+    // detector reports the same verified import more than once.
+    edgeById.set(id, { id, source: edge.from, target: edge.to, kind: 'import' });
+  }
+  const edges = [...edgeById.values()].sort((a, b) => a.id.localeCompare(b.id));
 
   return { nodes: visibleNodes, edges, hiddenCount: allNodes.length - visibleNodes.length };
 }
