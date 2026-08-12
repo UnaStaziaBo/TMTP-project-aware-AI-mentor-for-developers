@@ -19,7 +19,21 @@ describe('architecture model validation', () => {
     ], warnings: [] });
     assert.deepEqual(model.areas[0]!.files, ['main.ts']);
     assert.equal(model.relationships.length, 1);
+    assert.equal(model.relationships[0]?.type, 'uses');
+    assert.equal(model.areas[0]?.role, 'core');
     assert.equal(model.fileRoles.length, 0);
+  });
+
+  it('normalizes bounded roles and relationship wording into the controlled vocabulary', () => {
+    const model = parseArchitectureModel(context, { summary: 'A small application.', areas: [
+      { id: 'host', name: 'Extension Host', shortPurpose: 'Starts commands.', role: 'arbitrary host wording', files: ['main.ts'], importantFiles: ['main.ts'], evidenceFiles: ['main.ts'], confidence: 0.8 },
+      { id: 'library', name: 'Library', shortPurpose: 'Stores shared types.', role: 'unbounded description', files: ['lib.ts'], importantFiles: [], evidenceFiles: ['lib.ts'], confidence: 0.7 },
+    ], fileRoles: [], relationships: [
+      { sourceAreaId: 'host', targetAreaId: 'library', type: 'calls through', label: 'calls through a shared type', explanation: 'The host imports the library.', evidenceFiles: ['main.ts'], confidence: 0.7 },
+    ], warnings: [] });
+    assert.equal(model.areas[0]?.role, 'entry');
+    assert.equal(model.areas[1]?.role, 'shared');
+    assert.equal(model.relationships[0]?.type, 'invokes');
   });
 
   it('rejects areas with no valid evidence and duplicate ids', () => {

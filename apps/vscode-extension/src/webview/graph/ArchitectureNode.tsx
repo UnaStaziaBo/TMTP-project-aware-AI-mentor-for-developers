@@ -5,6 +5,7 @@ export interface ArchitectureNodeData extends Record<string, unknown> {
   kind: 'architecture-root' | 'architecture-area';
   title: string;
   shortPurpose?: string;
+  roleLabel?: string;
   fileCount?: number;
   areaId?: string;
   expanded?: boolean;
@@ -20,6 +21,7 @@ export function ArchitectureNode({ data, selected }: NodeProps<ArchitectureFlowN
     <div className="architecture-graph-title">{data.title}</div>
     {isArea ? <>
       <div className="architecture-graph-purpose">{data.shortPurpose}</div>
+      <div className="architecture-graph-role">{data.roleLabel}</div>
       <div className="architecture-graph-count">{data.fileCount} represented file{data.fileCount === 1 ? '' : 's'}</div>
       <div className="architecture-graph-actions">
         <button onClick={(event) => { event.stopPropagation(); data.onToggle?.(data.areaId!, false); }}>{data.expanded ? 'Collapse' : 'Expand'}</button>

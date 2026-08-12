@@ -1,4 +1,4 @@
-import type { ArchitectureModel } from '@tmpt/ai';
+import { architecturalRoleLabel, architectureRelationshipLabel, normalizeArchitecturalRole, normalizeArchitectureRelationshipType, type ArchitecturalRole, type ArchitectureModel, type ArchitectureRelationshipType } from '@tmpt/ai';
 import type { GraphEdgeView, GraphNodeView } from '../../projectGraphView.js';
 
 export type ArchitectureEntityKind = 'architecture-root' | 'architecture-area' | 'architecture-file';
@@ -8,13 +8,17 @@ export interface ArchitectureGraphNode extends GraphNodeView {
   areaId?: string;
   shortPurpose?: string;
   fileCount?: number;
+  role?: ArchitecturalRole;
+  roleLabel?: string;
   isSynthetic?: boolean;
 }
 
 export interface ArchitectureGraphEdge extends GraphEdgeView {
-  kind: 'architecture' | 'membership';
+  kind: 'architecture' | 'membership' | 'root';
+  relationshipType?: ArchitectureRelationshipType;
   label?: string;
   explanation?: string;
+  evidenceFiles?: string[];
 }
 
 export interface ArchitectureGraph {
@@ -52,10 +56,12 @@ export function buildArchitectureGraph(
   for (const area of areas) {
     nodes.push({
       entityType: 'architecture-area', areaId: area.id, shortPurpose: area.shortPurpose, fileCount: area.files.length,
+      role: normalizeArchitecturalRole(area.role, `${area.name} ${area.shortPurpose}`), roleLabel: architecturalRoleLabel(normalizeArchitecturalRole(area.role, `${area.name} ${area.shortPurpose}`)),
       file: areaNodeId(area.id), title: area.name, area: 'AI-interpreted area', description: area.shortPurpose,
       score: 0, confidence: area.confidence, tier: 'medium', learningStatus: { icon: '◇', label: 'AI-interpreted architecture area' }, hasEdge: false,
     });
-    edges.push({ id: `${ROOT_ID}=>${areaNodeId(area.id)}`, source: ROOT_ID, target: areaNodeId(area.id), kind: 'membership' });
+    // The anchor is a visual grouping aid, never an asserted architecture interaction.
+    edges.push({ id: `${ROOT_ID}=>${areaNodeId(area.id)}`, source: ROOT_ID, target: areaNodeId(area.id), kind: 'root' });
     if (!expandedAreas.has(area.id)) continue;
     const candidates = (allFilesAreas.has(area.id) ? area.files : area.importantFiles.length ? area.importantFiles : area.files)
       .filter((file, index, list) => list.indexOf(file) === index)
@@ -75,10 +81,12 @@ export function buildArchitectureGraph(
   const areaIds = new Set(areas.map((area) => area.id));
   for (const relationship of architecture.relationships) {
     if (!areaIds.has(relationship.sourceAreaId) || !areaIds.has(relationship.targetAreaId)) continue;
+    const type = normalizeArchitectureRelationshipType(relationship.type ?? relationship.label);
     edges.push({
       id: `architecture:${relationship.sourceAreaId}=>${relationship.targetAreaId}:${relationship.label}`,
       source: areaNodeId(relationship.sourceAreaId), target: areaNodeId(relationship.targetAreaId), kind: 'architecture',
-      label: relationship.label, explanation: relationship.explanation,
+      relationshipType: type, label: architectureRelationshipLabel(type), explanation: relationship.explanation,
+      evidenceFiles: [...relationship.evidenceFiles].sort((a, b) => a.localeCompare(b)),
     });
   }
   return {
@@ -89,3 +97,22 @@ export function buildArchitectureGraph(
 }
 
 export function architectureAreaNodeId(areaId: string): string { return areaNodeId(areaId); }
+
+/** Immediate semantic neighborhood used for node focus; it never removes nodes. */
+export function architectureFocusAreaIds(edges: readonly ArchitectureGraphEdge[], areaId: string): Set<string> {
+  const result = new Set([areaId]);
+  for (const edge of edges) {
+    if (edge.kind !== 'architecture') continue;
+    if (edge.source === areaNodeId(areaId)) result.add(edge.target.slice('architecture:area:'.length));
+    if (edge.target === areaNodeId(areaId)) result.add(edge.source.slice('architecture:area:'.length));
+  }
+  return result;
+}
+
+export function architectureRelationshipsForArea(edges: readonly ArchitectureGraphEdge[], areaId: string): { incoming: ArchitectureGraphEdge[]; outgoing: ArchitectureGraphEdge[] } {
+  const nodeId = areaNodeId(areaId);
+  return {
+    incoming: edges.filter((edge) => edge.kind === 'architecture' && edge.target === nodeId),
+    outgoing: edges.filter((edge) => edge.kind === 'architecture' && edge.source === nodeId),
+  };
+}

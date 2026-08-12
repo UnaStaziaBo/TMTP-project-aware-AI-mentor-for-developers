@@ -76,11 +76,39 @@ export async function layoutProjectGraph(
   nodes: readonly GraphNodeView[],
   edges: readonly GraphEdgeView[],
 ): Promise<LayoutResult> {
+  return layoutGraph(nodes, edges, false);
+}
+
+/**
+ * Architecture keeps semantic edge direction intact while using controlled
+ * area roles as deterministic rank/order hints. It is intentionally separate
+ * from the dependency layout so dependency graph behavior cannot regress.
+ */
+export async function layoutArchitectureGraph(
+  nodes: readonly GraphNodeView[],
+  edges: readonly GraphEdgeView[],
+): Promise<LayoutResult> {
+  return layoutGraph(nodes, edges, true);
+}
+
+async function layoutGraph(
+  nodes: readonly GraphNodeView[],
+  edges: readonly GraphEdgeView[],
+  architecture: boolean,
+): Promise<LayoutResult> {
   if (nodes.length === 0) {
     return { nodes: [], edges: [] };
   }
 
-  const sortedNodes = [...nodes].sort((a, b) => a.file.localeCompare(b.file));
+  const roleRank: Record<string, number> = { entry: 0, orchestration: 1, core: 2, integration: 3, shared: 4, supporting: 5, testing: 6, documentation: 7 };
+  const sortedNodes = [...nodes].sort((a, b) => {
+    if (architecture) {
+      const aRank = roleRank[(a as GraphNodeView & { role?: string }).role ?? 'core'] ?? 2;
+      const bRank = roleRank[(b as GraphNodeView & { role?: string }).role ?? 'core'] ?? 2;
+      if (aRank !== bRank) return aRank - bRank;
+    }
+    return a.file.localeCompare(b.file);
+  });
   const nodeIds = new Set(sortedNodes.map((node) => node.file));
   const dependencyEdges = edges
     .filter((edge) => edge.kind !== 'learning' && nodeIds.has(edge.source) && nodeIds.has(edge.target))
@@ -109,6 +137,11 @@ export async function layoutProjectGraph(
       'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
       'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
       'elk.layered.cycleBreaking.strategy': 'GREEDY',
+      ...(architecture ? {
+        'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
+        'elk.spacing.nodeNode': '70',
+        'elk.layered.spacing.nodeNodeBetweenLayers': '125',
+      } : {}),
       // Unrelated files (no import path between them) form their own visual
       // clusters instead of being interleaved into one hairball.
       'elk.separateConnectedComponents': 'true',
@@ -118,6 +151,13 @@ export async function layoutProjectGraph(
       id: node.file,
       width: NODE_WIDTH,
       height: NODE_HEIGHT,
+      ...(architecture ? {
+        layoutOptions: node.file === 'architecture:project'
+          ? { 'elk.layered.layering.layerConstraint': 'FIRST' }
+          : ['documentation', 'testing'].includes((node as GraphNodeView & { role?: string }).role ?? '')
+            ? { 'elk.layered.layering.layerConstraint': 'LAST' }
+            : undefined,
+      } : {}),
     })),
     edges: dependencyEdges.map((edge) => ({
       id: edge.id,

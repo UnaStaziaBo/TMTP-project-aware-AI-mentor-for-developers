@@ -2,7 +2,7 @@ export type { FileLesson, KeyConstruct } from './types/FileLesson.js';
 export type { FileLessonContext } from './types/FileLessonContext.js';
 export type { PracticePlan, PracticeScenario } from './types/PracticePlan.js';
 export type { PracticePlanContext, ScenarioFocus, ScenarioDifficulty, FileSummary } from './types/PracticePlanContext.js';
-export type { ProjectArchitectureContext, ArchitectureModel, ArchitectureArea, ArchitectureRelationship } from './types/Architecture.js';
+export type { ProjectArchitectureContext, ArchitectureModel, ArchitectureArea, ArchitectureRelationship, ArchitecturalRole, ArchitectureRelationshipType } from './types/Architecture.js';
 export type { AIProvider, AIProviderCredentials, AIProviderId, TestConnectionResult } from './providers/AIProvider.js';
 export { OpenAIProvider } from './providers/OpenAIProvider.js';
 export { AnthropicProvider } from './providers/AnthropicProvider.js';
@@ -14,4 +14,5 @@ export { ARCHITECTURE_SYSTEM_PROMPT, buildArchitectureUserPrompt } from './promp
 export { parseFileLesson } from './validateFileLesson.js';
 export { parsePracticePlan } from './validatePracticePlan.js';
 export { parseArchitectureModel } from './validateArchitecture.js';
+export { architecturalRoleLabel, architectureRelationshipLabel, normalizeArchitecturalRole, normalizeArchitectureRelationshipType } from './architectureSemantics.js';
 export { InvalidAIResponseError } from './errors.js';

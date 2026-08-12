@@ -23,11 +23,21 @@ export interface ArchitectureArea {
   importantFiles: string[];
   evidenceFiles: string[];
   confidence: number;
+  /** Controlled visual role used as a deterministic layout hint. */
+  role?: ArchitecturalRole;
 }
+
+export type ArchitectureRelationshipType =
+  | 'uses' | 'produces' | 'provides' | 'feeds' | 'configures' | 'coordinates' | 'implements'
+  | 'invokes' | 'reads-from' | 'writes-to' | 'supports' | 'validates' | 'tests' | 'demonstrates';
+
+export type ArchitecturalRole = 'entry' | 'orchestration' | 'core' | 'integration' | 'shared' | 'supporting' | 'testing' | 'documentation';
 
 export interface ArchitectureRelationship {
   sourceAreaId: string;
   targetAreaId: string;
+  /** Controlled semantic category; direction always reads source → type → target. */
+  type?: ArchitectureRelationshipType;
   label: string;
   explanation: string;
   evidenceFiles: string[];

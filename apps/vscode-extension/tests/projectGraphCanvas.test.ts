@@ -245,6 +245,14 @@ describe('ProjectGraphCanvas (real DOM via jsdom)', () => {
       assert.ok(container.textContent?.includes('Architecture overview'));
       assert.equal(requests, 0, 'viewing cached architecture must not trigger another AI request');
 
+      const help = [...container.querySelectorAll('button')].find((button) => button.textContent === 'How to read this map?');
+      assert.ok(help, 'expected architecture help affordance');
+      help!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      const fit = [...container.querySelectorAll('button')].find((button) => button.textContent === 'Fit to Screen');
+      fit!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      await tick(30);
+      assert.equal(requests, 0, 'architecture help and viewport interactions must not request analysis');
+
       const expand = [...container.querySelectorAll('button')].find((button) => button.textContent === 'Expand');
       assert.ok(expand, 'expected an architecture-area expansion affordance');
       expand!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));

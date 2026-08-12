@@ -4,7 +4,7 @@ import { buildSmoothPath, type Point } from './edgePath.js';
 
 export interface RoutedEdgeData extends Record<string, unknown> {
   points: Point[];
-  kind: 'import' | 'learning' | 'architecture' | 'membership';
+  kind: 'import' | 'learning' | 'architecture' | 'membership' | 'root';
   label?: string;
   explanation?: string;
 }

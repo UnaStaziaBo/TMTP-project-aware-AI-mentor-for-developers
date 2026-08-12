@@ -1,5 +1,6 @@
 import { InvalidAIResponseError } from './errors.js';
 import type { ArchitectureArea, ArchitectureModel, ArchitectureRelationship, ProjectArchitectureContext } from './types/Architecture.js';
+import { normalizeArchitecturalRole, normalizeArchitectureRelationshipType } from './architectureSemantics.js';
 
 const MAX_AREAS = 12;
 const MAX_RELATIONSHIPS = 16;
@@ -27,7 +28,7 @@ export function parseArchitectureModel(context: ProjectArchitectureContext, raw:
     const level = confidence(area.confidence);
     if (!id || !/^[a-z0-9-]+$/.test(id) || ids.has(id) || !name || !shortPurpose || evidenceFiles.length === 0 || level === undefined) continue;
     ids.add(id);
-    areas.push({ id, name, shortPurpose, files, importantFiles: validFiles(area.importantFiles, known).filter((file) => files.includes(file)), evidenceFiles, confidence: level });
+    areas.push({ id, name, shortPurpose, files, importantFiles: validFiles(area.importantFiles, known).filter((file) => files.includes(file)), evidenceFiles, confidence: level, role: normalizeArchitecturalRole(area.role, `${name} ${shortPurpose}`) });
   }
   if (areas.length === 0) throw new InvalidAIResponseError('Architecture response contained no valid evidence-backed areas');
   const relationships: ArchitectureRelationship[] = [];
@@ -41,7 +42,8 @@ export function parseArchitectureModel(context: ProjectArchitectureContext, raw:
     const level = confidence(relation.confidence);
     const evidenceFiles = validFiles(relation.evidenceFiles, known);
     if (!sourceAreaId || !targetAreaId || sourceAreaId === targetAreaId || !ids.has(sourceAreaId) || !ids.has(targetAreaId) || !label || !explanation || !evidenceFiles.length || level === undefined) continue;
-    relationships.push({ sourceAreaId, targetAreaId, label, explanation, evidenceFiles, confidence: level });
+    const type = normalizeArchitectureRelationshipType(relation.type ?? label);
+    relationships.push({ sourceAreaId, targetAreaId, type, label, explanation, evidenceFiles, confidence: level });
   }
   const fileRoles = (Array.isArray(input.fileRoles) ? input.fileRoles : []).flatMap((candidate) => {
     if (typeof candidate !== 'object' || candidate === null) return [];
