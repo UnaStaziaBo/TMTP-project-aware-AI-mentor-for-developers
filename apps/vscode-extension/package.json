@@ -3,7 +3,7 @@
   "publisher": "UnaStaziaBo",
   "displayName": "TMTP - Teach Me This Project",
   "description": "Understand a new codebase before writing your first line of code.",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "engines": {
     "vscode": "^1.85.0"
   },

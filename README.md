@@ -2,7 +2,7 @@
 
 ## Contributors
 
-- [Steve Michira](https://github.com/wise-wise) — [Code the Giant](https://codethegiant.vercel.app/)
+- [Steve Michira](https://www.linkedin.com/in/steve-michira-97a280339/) — [Code the Giant](https://codethegiant.vercel.app/)
 
 ### Understand the project before you modify it.
 
@@ -85,20 +85,15 @@ Detection is heuristic rather than a full semantic build-system analysis. See [s
 
 ## Interactive Project Graph
 
-**The problem:** A directory tree hides how source files relate, while a dense dependency graph can become as difficult to read as the codebase itself.
+**The problem:** A directory tree does not explain the responsibilities and interactions that make up a project architecture.
 
-**What TMTP does:** The graph combines:
+**What TMTP does:** Project Graph opens directly into an AI-interpreted Architecture Graph grounded in verified scanner evidence. It shows a synthetic project root, architecture areas, their evidence-backed interactions, and canonical files on demand. The Architecture Navigator provides a compact topology, current-viewport indicator, area navigation, selected file-to-area orientation, and real file-level learning progress.
 
-- verified project-local imports shown as solid relationships;
-- a separately labelled, deterministic recommended lesson sequence;
-- **Core**, **Related**, and **All files** scopes;
-- search, zoom, pan, fit-to-screen, and a project overview;
-- incoming **used by** and outgoing **uses** highlighting;
-- per-file importance, learning rationale, and progress.
+Search, pan, zoom, Fit to Screen, relationship inspection, area expansion, canonical-file selection, and progress remain available directly in this graph. Dependency/import detection remains part of the deterministic scanner evidence pipeline, but the former Dependencies graph is not user-facing.
 
-**Why it matters:** You can distinguish how code is connected from how it may be useful to learn it. TMTP never presents a teaching relationship as a code dependency.
+**Why it matters:** You can orient yourself in the systems and responsibilities of an unfamiliar codebase without navigating a separate graph mode.
 
-Import extraction currently covers TypeScript/JavaScript relative imports and resolvable project-local Python imports. Other languages can still appear as files and starting points, but their import graphs may be sparse.
+Project Graph needs an AI provider configuration to generate an architecture model. TMTP reuses a compatible cached architecture model when available; without a configured API key it explains that configuration is required. Scanner analysis itself remains local and does not require an API key.
 
 ## Guided Project Tour
 
@@ -227,7 +222,7 @@ Until the public Marketplace listing is available:
 5. Open a project folder.
 6. Select the TMTP icon in the Activity Bar.
 7. Open the Project Graph, Project Overview, or **Where Should I Start?** view.
-8. Choose OpenAI, Anthropic Claude, or Google Gemini and configure its API key only when you want to use the Guided Tour or practice features.
+8. Choose OpenAI, Anthropic Claude, or Google Gemini and configure its API key to use Project Graph, the Guided Tour, or practice features.
 <!-- 
 ### Build from source
 
@@ -293,4 +288,3 @@ No open-source license file has been committed yet. Until the project owner sele
 - [Source repository](https://github.com/UnaStaziaBo/TMTP-project-aware-AI-mentor-for-developers)
 <!-- - [Issue tracker](https://github.com/UnaStaziaBo/TMTP-project-aware-AI-mentor-for-developers/issues) -->
 - [Changelog](CHANGELOG.md)
-

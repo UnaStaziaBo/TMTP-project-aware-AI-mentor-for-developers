@@ -61,34 +61,24 @@ the open folder and streams results into a themed editor webview with four tabs:
   Constructs are marked read, 80% after practice, and 100% when mastered.
   Scanner confidence still controls visual importance, but is no longer shown
   as though it were study completion.
-- **🕸️ Project Graph** — an explorable code-and-learning graph of the project
-  (React Flow + ELK.js), replacing the old flat Knowledge Map list. ELK's
-  layered algorithm lays every file out top-to-bottom by dependency direction
-  (entry points on top, imports flowing down), minimizes edge crossings, and
-  keeps disconnected files clustered separately instead of interleaved into
-  one hairball. All nodes share the same size — importance is communicated
-  through border weight and color intensity instead, so a dense graph stays
-  readable rather than lopsided. Solid edges are real, scanner-verified local
-  import relationships — never invented — while green dashed edges are an
-  explicitly labelled deterministic recommended lesson sequence. Both use
-  ELK's routed paths rather than straight endpoint guesses. Every core node
-  shows its learning step and scanner-derived reason for being useful. Its
-  status icon also reflects live learning progress
-  (⚪ not visited / 🟡 explained / 🟠 practiced / ⭐ mastered), which updates
-  automatically as you use the Guided Tour and Practice. Clicking a node just
-  selects it and opens the same detail panel as before — **Open File**,
-  **Explain this File**, **Practice this File**, **Mark as Learned** —
-  without moving the camera; **Fit to Screen** and search provide explicit
-  navigation. The graph opens in **Core** scope, **Related** adds one-hop
-  neighbours, and **All files** reveals the full scan. Generated TypeScript
-  sidecars, source maps, tests, examples, and build output do not lead the
-  Core view but remain inspectable in All files. Hovering a node highlights
-  outgoing “uses” imports in orange and incoming “used by” imports in blue.
-  A permanent legend distinguishes code dependencies from teaching order.
+- **🕸️ Project Graph** — opens directly into the AI-interpreted Architecture
+  Graph (React Flow + ELK.js); users do not choose between Dependencies and
+  Architecture modes. The graph renders a synthetic project root,
+  evidence-backed architecture areas, semantic architecture relationships,
+  membership connectors, and canonical file cards on demand. The
+  **Architecture Navigator** shows the compact topology, current viewport,
+  selected area or file context, and aggregated real learning progress; it can
+  center the main graph on an area. Search, pan, zoom, **Fit to Screen**,
+  relationship inspection, expansion, file selection, and file actions remain
+  available. A configured AI provider is required to create the architecture
+  model; the extension reuses a compatible cached model when available and
+  clearly reports when configuration is required. Scanner dependency/import
+  analysis remains local verified evidence for the architecture model, even
+  though the legacy Dependencies graph is no longer user-facing.
 
 No chat, no global progress tracking beyond per-file learning status yet —
-that's future milestones. The scanner itself has no AI dependency, and
-neither does the graph.
+that's future milestones. The scanner itself has no AI dependency; Project
+Graph needs AI configuration only to generate its architecture model.
 
 ## Running it
 
@@ -125,14 +115,12 @@ To reopen the panel manually, run the `TMTP: Show Project Overview` command.
   learning-status lookup. It classifies generated/test/example files as
   auxiliary for progressive disclosure; they are not deleted from the model.
 - `src/webview/graph/` — the only React code in the extension, isolated to
-  the graph tab: `ProjectGraphCanvas.tsx` (Core/Related/All scopes,
-  deterministic lesson order, search, import highlighting, custom SVG project overview, and
-  controls), `FileNode.tsx` (the uniformly-sized node with learning step and
-  rationale), `layout.ts`
-  (deterministic ELK.js layered layout — same input always produces the same
-  positions and routes), `RoutedEdge.tsx` (renders ELK's real computed edge
-  path instead of a guessed curve), and `edgePath.ts` (smooths ELK's routed
-  polyline into a curve without losing its node-avoiding path).
+  the graph tab: `ProjectGraphCanvas.tsx` mounts Architecture directly and
+  retains the old Dependencies projection only as dormant code for potential
+  future reuse; `ArchitectureGraphCanvas.tsx` renders the architecture cards,
+  relationships, search, fit controls, and Navigator; `architectureGraph.ts`
+  adapts the AI model to graph nodes and edges; and `layout.ts`,
+  `RoutedEdge.tsx`, and `edgePath.ts` preserve deterministic routed layout.
 - `src/webview/main.ts` — renders the rest of the webview UI (vanilla DOM,
   no React) from the streamed messages, and mounts the graph canvas into a
   persistent container that survives the rest of the app's re-renders. It also
