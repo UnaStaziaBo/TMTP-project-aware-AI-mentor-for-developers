@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Background, Controls, MarkerType, Panel, ReactFlow, useReactFlow, type Edge, type Node } from '@xyflow/react';
+import { Background, Controls, MarkerType, Panel, ReactFlow, useReactFlow, useStore, useViewport, type Edge, type Node } from '@xyflow/react';
 import type { ArchitectureModel } from '@tmpt/ai';
 import type { GraphNodeView } from '../../projectGraphView.js';
 import { FILE_NODE_TYPES, type FileFlowNode } from './FileNode.js';
@@ -8,18 +8,82 @@ import { ROUTED_EDGE_TYPES, type RoutedEdgeData } from './RoutedEdge.js';
 import { layoutArchitectureGraph, type LayoutResult } from './layout.js';
 import { architectureFocusAreaIds, architectureRelationshipsForArea, buildArchitectureGraph, isSemanticArchitectureEdge, visibleArchitectureConnectionLabel, type ArchitectureGraphEdge, type ArchitectureGraphNode } from './architectureGraph.js';
 import { buildSmoothPath } from './edgePath.js';
+import { architectureNavigatorProgress, architectureNavigatorViewportBounds, selectedArchitectureNavigatorArea, type ArchitectureNavigatorAreaProgress } from './architectureNavigator.js';
 
 const EMPTY_LAYOUT: LayoutResult = { nodes: [], edges: [] };
 const FIT_OPTIONS = { padding: 0.16, duration: 300 };
 
-function ArchitectureOverview({ layout, edgeById, onFit }: { layout: LayoutResult; edgeById: ReadonlyMap<string, ArchitectureGraphEdge>; onFit: () => void }) {
-  if (!layout.nodes.length) return null;
-  const padding = 100;
-  const minX = Math.min(...layout.nodes.map((node) => node.x)) - padding;
-  const minY = Math.min(...layout.nodes.map((node) => node.y)) - padding;
-  const maxX = Math.max(...layout.nodes.map((node) => node.x + node.width)) + padding;
-  const maxY = Math.max(...layout.nodes.map((node) => node.y + node.height)) + padding;
-  return <Panel position="bottom-right" className="graph-overview-panel"><button className="graph-overview-button" onClick={onFit} title="Fit architecture map to screen"><span className="graph-overview-label">Architecture overview</span><svg className="graph-overview-svg" viewBox={`${minX} ${minY} ${maxX - minX} ${maxY - minY}`}>{layout.edges.map((edge) => <path key={edge.id} className={edgeById.get(edge.id)?.kind === 'architecture' ? 'graph-overview-edge architecture' : 'graph-overview-edge import'} d={buildSmoothPath(edge.points)} />)}{layout.nodes.map((node) => <rect key={node.file} className="graph-overview-node graph-overview-node-medium" x={node.x} y={node.y} width={node.width} height={node.height} rx={12} />)}</svg></button></Panel>;
+function ArchitectureNavigator({ layout, edgeById, selectedArea, selectedFile, areaByFile, progressByArea, startedAreas, totalAreas, onFocusArea, onFit }: {
+  layout: LayoutResult;
+  edgeById: ReadonlyMap<string, ArchitectureGraphEdge>;
+  selectedArea: string | null;
+  selectedFile: string | null;
+  areaByFile: ReadonlyMap<string, string>;
+  progressByArea: ReadonlyMap<string, ArchitectureNavigatorAreaProgress>;
+  startedAreas: number;
+  totalAreas: number;
+  onFocusArea: (areaId: string) => void;
+  onFit: () => void;
+}) {
+  const viewport = useViewport();
+  const canvasWidth = useStore((state) => state.width);
+  const canvasHeight = useStore((state) => state.height);
+  const navigatorNodes = useMemo(() => layout.nodes.filter((node) => {
+    const architectureNode = node as ArchitectureGraphNode;
+    return architectureNode.entityType === 'architecture-root' || architectureNode.entityType === 'architecture-area';
+  }), [layout.nodes]);
+
+  if (!navigatorNodes.length) return null;
+
+  const navigatorNodeIds = new Set(navigatorNodes.map((node) => node.file));
+  const padding = 80;
+  const minX = Math.min(...navigatorNodes.map((node) => node.x)) - padding;
+  const minY = Math.min(...navigatorNodes.map((node) => node.y)) - padding;
+  const maxX = Math.max(...navigatorNodes.map((node) => node.x + node.width)) + padding;
+  const maxY = Math.max(...navigatorNodes.map((node) => node.y + node.height)) + padding;
+  const currentAreaId = selectedArchitectureNavigatorArea(selectedArea, selectedFile, areaByFile);
+  const currentArea = currentAreaId ? navigatorNodes.find((node) => (node as ArchitectureGraphNode).areaId === currentAreaId) as ArchitectureGraphNode | undefined : undefined;
+  const currentAreaProgress = currentArea?.areaId ? progressByArea.get(currentArea.areaId) : undefined;
+  const viewportBounds = architectureNavigatorViewportBounds(viewport, canvasWidth, canvasHeight);
+  const navigateWithKeyboard = (event: React.KeyboardEvent<SVGGElement>, areaId: string) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      onFocusArea(areaId);
+    }
+  };
+
+  return <Panel position="bottom-right" className="graph-overview-panel architecture-navigator-panel nopan">
+    <div className="architecture-navigator-header">
+      <span className="graph-overview-label">Architecture Navigator</span>
+      <button className="architecture-navigator-fit" onClick={onFit} title="Fit architecture map to screen">Fit</button>
+    </div>
+    <svg className="graph-overview-svg architecture-navigator-svg" viewBox={`${minX} ${minY} ${maxX - minX} ${maxY - minY}`} aria-label="Architecture navigator">
+      <title>Architecture Navigator</title>
+      {layout.edges.filter((edge) => {
+        const source = edgeById.get(edge.id);
+        return Boolean(source && navigatorNodeIds.has(edge.source) && navigatorNodeIds.has(edge.target) && (source.kind === 'root' || source.kind === 'architecture'));
+      }).map((edge) => <path key={edge.id} className={edgeById.get(edge.id)?.kind === 'architecture' ? 'architecture-navigator-edge architecture' : 'architecture-navigator-edge hierarchy'} d={buildSmoothPath(edge.points)} />)}
+      <rect className="architecture-navigator-viewport" x={viewportBounds.x} y={viewportBounds.y} width={viewportBounds.width} height={viewportBounds.height} rx={14} pointerEvents="none" />
+      {navigatorNodes.map((node) => {
+        const architectureNode = node as ArchitectureGraphNode;
+        const areaId = architectureNode.areaId;
+        const isRoot = architectureNode.entityType === 'architecture-root';
+        const selected = areaId === currentAreaId;
+        const progress = areaId ? progressByArea.get(areaId) : undefined;
+        const progressState = !progress || progress.exploredFiles === 0 ? 'unstarted' : progress.exploredFiles === progress.totalFiles ? 'complete' : 'started';
+        const label = isRoot ? `${node.title}, project root` : `${node.title}, ${architectureNode.roleLabel ?? 'architecture area'}, ${architectureNode.fileCount ?? 0} files, ${progress?.exploredFiles ?? 0} explored`;
+        return <g key={node.file} className={`architecture-navigator-node ${isRoot ? 'root' : 'area'}${selected ? ' selected' : ''}`} role={areaId ? 'button' : undefined} tabIndex={areaId ? 0 : undefined} aria-label={label} onClick={areaId ? () => onFocusArea(areaId) : undefined} onKeyDown={areaId ? (event) => navigateWithKeyboard(event, areaId) : undefined}>
+          <title>{isRoot ? node.title : `${node.title}: ${architectureNode.shortPurpose ?? 'Architecture area'} (${architectureNode.fileCount ?? 0} files)`}</title>
+          <rect x={node.x} y={node.y} width={node.width} height={node.height} rx={14} />
+          {!isRoot ? <circle className={`architecture-navigator-progress ${progressState}`} cx={node.x + node.width - 15} cy={node.y + 15} r={6} pointerEvents="none" /> : null}
+        </g>;
+      })}
+    </svg>
+    <div className="architecture-navigator-summary" aria-live="polite">
+      {currentArea ? <><small>Selected</small><strong>{selectedFile ? selectedFile : currentArea.title}</strong><span>{selectedFile ? `inside ${currentArea.title}` : `${currentArea.roleLabel ?? 'Architecture area'} · ${currentArea.fileCount ?? 0} files`}</span>{currentAreaProgress ? <span>{currentAreaProgress.exploredFiles} / {currentAreaProgress.totalFiles} files explored</span> : null}</> : <span>Hover an area for details, or click it to orient in the map.</span>}
+    </div>
+    {totalAreas ? <div className="architecture-navigator-project-progress">Architecture progress · {startedAreas} / {totalAreas} areas started</div> : null}
+  </Panel>;
 }
 
 export function ArchitectureGraphCanvas({ architecture, files, projectName, selectedFile, onSelectFile, onBack }: {
@@ -40,7 +104,7 @@ export function ArchitectureGraphCanvas({ architecture, files, projectName, sele
   const [pendingFocusFile, setPendingFocusFile] = useState<string | null>(null);
   const [layout, setLayout] = useState<LayoutResult>(EMPTY_LAYOUT);
   const hoverClearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { fitView } = useReactFlow();
+  const { fitView, getZoom, setCenter } = useReactFlow();
   const areaByFile = useMemo(() => {
     const result = new Map<string, string>();
     for (const area of [...architecture.areas].sort((a, b) => a.id.localeCompare(b.id))) for (const file of area.files) if (!result.has(file)) result.set(file, area.id);
@@ -53,6 +117,7 @@ export function ArchitectureGraphCanvas({ architecture, files, projectName, sele
   const graph = useMemo(() => buildArchitectureGraph(architecture, files, expandedAreas, allFilesAreas, projectName), [architecture, files, expandedAreas, allFilesAreas, projectName]);
   const edgeById = useMemo(() => new Map(graph.edges.map((edge) => [edge.id, edge])), [graph.edges]);
   const areaNameById = useMemo(() => new Map(architecture.areas.map((area) => [area.id, area.name])), [architecture]);
+  const navigatorProgress = useMemo(() => architectureNavigatorProgress(architecture.areas, files), [architecture.areas, files]);
   const focusAreaId = selectedArea ?? hoveredArea;
   const focusEdgeId = selectedEdgeId;
   const relatedAreaIds = useMemo(() => {
@@ -129,6 +194,18 @@ export function ArchitectureGraphCanvas({ architecture, files, projectName, sele
     setPendingFocusFile(file);
   }
 
+  function focusNavigatorArea(areaId: string) {
+    const node = layout.nodes.find((candidate) => candidate.file === `architecture:area:${areaId}`);
+    if (!node) return;
+    const reducedMotion = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    setSelectedArea(areaId);
+    setSelectedEdgeId(null);
+    void setCenter(node.x + node.width / 2, node.y + node.height / 2, {
+      zoom: Math.max(0.45, Math.min(getZoom(), 0.85)),
+      duration: reducedMotion ? 0 : 260,
+    });
+  }
+
   const flowNodes: Node[] = useMemo(() => layout.nodes.map((node) => {
     const architectureNode = node as ArchitectureGraphNode;
     if (architectureNode.entityType === 'architecture-area' || architectureNode.entityType === 'architecture-root') {
@@ -180,7 +257,7 @@ export function ArchitectureGraphCanvas({ architecture, files, projectName, sele
     minZoom={0.1} maxZoom={2} proOptions={{ hideAttribution: true }}
   >
     <Background gap={24} /><Controls showInteractive={false} />
-    <ArchitectureOverview layout={layout} edgeById={edgeById} onFit={() => void fitView(FIT_OPTIONS)} />
+    <ArchitectureNavigator layout={layout} edgeById={edgeById} selectedArea={selectedArea} selectedFile={selectedFile} areaByFile={areaByFile} progressByArea={navigatorProgress.byArea} startedAreas={navigatorProgress.startedAreas} totalAreas={navigatorProgress.totalAreas} onFocusArea={focusNavigatorArea} onFit={() => void fitView(FIT_OPTIONS)} />
     <Panel position="top-left" className="graph-search-panel"><input className="ai-text-input graph-search-input" type="text" placeholder="Search files…" value={search} onChange={(event) => { const next = event.target.value; setSearch(next); const match = files.filter((file) => file.file.toLowerCase().includes(next.trim().toLowerCase())).sort((a, b) => a.file.localeCompare(b.file))[0]; if (match && next.trim()) revealFile(match.file); }} onKeyDown={(event) => { if (event.key === 'Enter' && searchMatches[0]) revealFile(searchMatches[0].file); }} />{search ? <div className="graph-search-count">{searchMatches.length} match{searchMatches.length === 1 ? '' : 'es'}</div> : null}<div className="architecture-provenance">AI-interpreted from verified scanner evidence</div></Panel>
     <Panel position="top-right" className="graph-toggle-panel"><button className="graph-scope-button" onClick={onBack}>Dependencies</button><button className="graph-scope-button active">Architecture</button><button className="architecture-help-button" onClick={() => setShowHelp((current) => !current)} aria-expanded={showHelp}>How to read this map?</button><button className="ai-link-button" onClick={() => void fitView(FIT_OPTIONS)}>Fit to Screen</button></Panel>
     {showHelp ? <Panel position="top-right" className="architecture-help-panel"><strong>Reading the map</strong><span>Position follows architectural role and semantic flow.</span><span>Purple arrow + verb means one area interacts with another.</span><span>Grey connector + contains means project or area membership.</span><span>Click an arrow for evidence; click an area to focus it.</span></Panel> : null}

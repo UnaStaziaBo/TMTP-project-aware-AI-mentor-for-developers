@@ -246,7 +246,14 @@ describe('ProjectGraphCanvas (real DOM via jsdom)', () => {
       assert.ok(entryArea.querySelector('.architecture-graph-purpose')?.textContent?.includes('Starts the app.'));
       assert.ok(entryArea.querySelector('.architecture-graph-actions button'), 'the expand action belongs inside its architecture card');
       assert.ok(entryArea.closest('.react-flow__node')?.getAttribute('style')?.includes('width: 280px'), 'ELK uses the larger architecture-card width');
-      assert.ok(container.textContent?.includes('Architecture overview'));
+      assert.ok(container.textContent?.includes('Architecture Navigator'));
+      const navigatorAreas = [...container.querySelectorAll('.architecture-navigator-node.area')];
+      assert.equal(navigatorAreas.length, 2, 'navigator should show only the root-level architecture areas');
+      const navigatorEntry = navigatorAreas.find((area) => area.getAttribute('aria-label')?.startsWith('Entry,'));
+      assert.ok(navigatorEntry, 'expected Entry to be navigable from the architecture navigator');
+      navigatorEntry!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      await tick(30);
+      assert.ok(container.querySelector('.architecture-navigator-summary')?.textContent?.includes('Entry'), 'navigator should describe the selected area');
       assert.equal(container.querySelectorAll('.react-flow__edge.animated').length, 0, 'architecture edges remain static during graph interactions');
       assert.equal(requests, 0, 'viewing cached architecture must not trigger another AI request');
 
@@ -263,6 +270,7 @@ describe('ProjectGraphCanvas (real DOM via jsdom)', () => {
       expand!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
       await tick(300);
       assert.ok([...container.querySelectorAll('.graph-node-title')].some((element) => element.textContent === 'adapter.ts'));
+      assert.equal(container.querySelectorAll('.architecture-navigator-node.area').length, 2, 'expanded files must not clutter the architecture navigator');
       assert.equal(requests, 0, 'exploring the architecture canvas must not request analysis');
 
       root.unmount();
