@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Background,
   Controls,
@@ -25,8 +25,6 @@ import {
   type GraphGroupView,
 } from './repositoryHierarchy.js';
 
-// Loading the architecture renderer only when the user selects that mode
-// keeps React Flow's dependency canvas as the stable initial surface.
 const ArchitectureGraphCanvas = React.lazy(() =>
   import('./ArchitectureGraphCanvas.js').then(({ ArchitectureGraphCanvas: Canvas }) => ({ default: Canvas })),
 );
@@ -92,7 +90,10 @@ function GraphOverview({ layout, onFit }: { layout: LayoutResult; onFit: () => v
   );
 }
 
-function GraphInner({ nodes, edges, selectedFile, onSelectFile, architecture, architectureStatus = 'idle', architectureError, onRequestArchitecture, projectName }: ProjectGraphCanvasProps) {
+// Legacy Dependencies projection intentionally retained. Project Graph now
+// uses Architecture as its sole user-facing projection; keep this component
+// available for a future graph mode without initializing it in the active flow.
+function LegacyDependencyGraphInner({ nodes, edges, selectedFile, onSelectFile, architecture, architectureStatus = 'idle', architectureError, onRequestArchitecture, projectName }: ProjectGraphCanvasProps) {
   const [mapMode, setMapMode] = useState<'dependencies' | 'architecture'>('dependencies');
   const [scope, setScope] = useState<GraphScope>('core');
   const [search, setSearch] = useState('');
@@ -425,13 +426,29 @@ function GraphInner({ nodes, edges, selectedFile, onSelectFile, architecture, ar
 }
 
 export function ProjectGraphCanvas(props: ProjectGraphCanvasProps) {
-  if (props.nodes.length === 0) {
-    return <div className="empty-line">No files with a strong enough signal to graph yet.</div>;
+  return <ReactFlowProvider><ArchitectureProjectGraph {...props} /></ReactFlowProvider>;
+}
+
+function ArchitectureProjectGraph({ nodes, selectedFile, onSelectFile, architecture, architectureStatus = 'idle', architectureError, onRequestArchitecture, projectName }: ProjectGraphCanvasProps) {
+  const hasRequestedArchitecture = useRef(false);
+
+  useEffect(() => {
+    if (architecture || architectureStatus !== 'idle' || hasRequestedArchitecture.current || !onRequestArchitecture) return;
+    hasRequestedArchitecture.current = true;
+    // Requesting uses the extension's existing fingerprint/provider/model
+    // cache path. It is the sole Architecture request for this graph mount.
+    onRequestArchitecture();
+  }, [architecture, architectureStatus, onRequestArchitecture]);
+
+  if (architecture) {
+    return <React.Suspense fallback={<div className="empty-line">Opening project graph…</div>}>
+      <ArchitectureGraphCanvas architecture={architecture} files={nodes} projectName={projectName} selectedFile={selectedFile} onSelectFile={onSelectFile} />
+    </React.Suspense>;
   }
 
-  return (
-    <ReactFlowProvider>
-      <GraphInner {...props} />
-    </ReactFlowProvider>
-  );
+  if (architectureStatus === 'generating' || architectureStatus === 'idle') {
+    return <div className="empty-line">Analyzing verified project evidence…</div>;
+  }
+
+  return <div className="empty-line">Architecture analysis is unavailable: {architectureError ?? 'no architecture model is available'}.</div>;
 }

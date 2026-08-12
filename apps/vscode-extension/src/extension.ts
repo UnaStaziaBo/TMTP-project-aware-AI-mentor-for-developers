@@ -332,12 +332,12 @@ async function handleExplainFile(
 
 async function handleRequestArchitecture(context: vscode.ExtensionContext, post: (message: ExtensionMessage) => void): Promise<void> {
   if (!latestResult) {
-    post({ type: 'architectureError', message: 'Run a scan before requesting architecture analysis. You can continue exploring verified dependencies.' });
+    post({ type: 'architectureError', message: 'Run a scan before generating the project graph.' });
     return;
   }
   const stored = await getAIConfig(context);
   if (!stored) {
-    post({ type: 'architectureError', message: 'Configure an AI provider to generate an architecture map. Dependencies remain available.' });
+    post({ type: 'architectureError', message: 'Configure an AI provider to generate the project graph.' });
     return;
   }
   const architectureContext = buildArchitectureContext(latestResult);
