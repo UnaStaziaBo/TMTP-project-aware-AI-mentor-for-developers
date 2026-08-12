@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Background, Controls, MarkerType, Panel, ReactFlow, useReactFlow, type Edge, type Node } from '@xyflow/react';
 import type { ArchitectureModel } from '@tmpt/ai';
 import type { GraphNodeView } from '../../projectGraphView.js';
@@ -6,11 +6,11 @@ import { FILE_NODE_TYPES, type FileFlowNode } from './FileNode.js';
 import { ARCHITECTURE_NODE_TYPES, type ArchitectureFlowNode } from './ArchitectureNode.js';
 import { ROUTED_EDGE_TYPES, type RoutedEdgeData } from './RoutedEdge.js';
 import { layoutArchitectureGraph, type LayoutResult } from './layout.js';
-import { architectureFocusAreaIds, architectureRelationshipsForArea, buildArchitectureGraph, type ArchitectureGraphEdge, type ArchitectureGraphNode } from './architectureGraph.js';
+import { architectureFocusAreaIds, architectureRelationshipsForArea, buildArchitectureGraph, isSemanticArchitectureEdge, visibleArchitectureConnectionLabel, type ArchitectureGraphEdge, type ArchitectureGraphNode } from './architectureGraph.js';
 import { buildSmoothPath } from './edgePath.js';
 
 const EMPTY_LAYOUT: LayoutResult = { nodes: [], edges: [] };
-const FIT_OPTIONS = { padding: 0.22, duration: 300 };
+const FIT_OPTIONS = { padding: 0.16, duration: 300 };
 
 function ArchitectureOverview({ layout, edgeById, onFit }: { layout: LayoutResult; edgeById: ReadonlyMap<string, ArchitectureGraphEdge>; onFit: () => void }) {
   if (!layout.nodes.length) return null;
@@ -35,11 +35,11 @@ export function ArchitectureGraphCanvas({ architecture, files, projectName, sele
   const [selectedArea, setSelectedArea] = useState<string | null>(null);
   const [hoveredArea, setHoveredArea] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
-  const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
   const [showHelp, setShowHelp] = useState(false);
   const [search, setSearch] = useState('');
   const [pendingFocusFile, setPendingFocusFile] = useState<string | null>(null);
   const [layout, setLayout] = useState<LayoutResult>(EMPTY_LAYOUT);
+  const hoverClearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { fitView } = useReactFlow();
   const areaByFile = useMemo(() => {
     const result = new Map<string, string>();
@@ -54,7 +54,7 @@ export function ArchitectureGraphCanvas({ architecture, files, projectName, sele
   const edgeById = useMemo(() => new Map(graph.edges.map((edge) => [edge.id, edge])), [graph.edges]);
   const areaNameById = useMemo(() => new Map(architecture.areas.map((area) => [area.id, area.name])), [architecture]);
   const focusAreaId = selectedArea ?? hoveredArea;
-  const focusEdgeId = selectedEdgeId ?? hoveredEdgeId;
+  const focusEdgeId = selectedEdgeId;
   const relatedAreaIds = useMemo(() => {
     const ids = new Set<string>();
     if (focusAreaId) {
@@ -82,6 +82,29 @@ export function ArchitectureGraphCanvas({ architecture, files, projectName, sele
     });
     return () => { cancelled = true; };
   }, [graph, fitView, pendingFocusFile]);
+
+  useEffect(() => () => {
+    if (hoverClearTimer.current !== null) clearTimeout(hoverClearTimer.current);
+  }, []);
+
+  function beginAreaHover(areaId: string) {
+    if (hoverClearTimer.current !== null) {
+      clearTimeout(hoverClearTimer.current);
+      hoverClearTimer.current = null;
+    }
+    setHoveredArea((current) => current === areaId ? current : areaId);
+  }
+
+  function endAreaHover() {
+    if (hoverClearTimer.current !== null) clearTimeout(hoverClearTimer.current);
+    // Handles, labels, and child controls can briefly move the pointer out of
+    // React Flow's node hit target. A short grace period prevents emphasis
+    // from oscillating while moving within one architecture card.
+    hoverClearTimer.current = setTimeout(() => {
+      hoverClearTimer.current = null;
+      setHoveredArea(null);
+    }, 140);
+  }
 
   function toggleArea(areaId: string, allFiles: boolean) {
     if (allFiles) {
@@ -124,14 +147,21 @@ export function ArchitectureGraphCanvas({ architecture, files, projectName, sele
 
   const flowEdges: Edge[] = useMemo(() => layout.edges.map((edge) => {
     const source = edgeById.get(edge.id);
-    const semantic = source?.kind === 'architecture';
+    const semantic = source ? isSemanticArchitectureEdge(source) : false;
+    const label = source ? visibleArchitectureConnectionLabel(source) : undefined;
     const focused = semantic && (edge.id === focusEdgeId || (focusAreaId !== null && (edge.source === `architecture:area:${focusAreaId}` || edge.target === `architecture:area:${focusAreaId}`)));
     const dimmed = relatedAreaIds.size > 0 && semantic && !focused;
     const isRoot = source?.kind === 'root';
-    return { id: edge.id, source: edge.source, target: edge.target, type: 'routed', selected: edge.id === selectedEdgeId, selectable: semantic, interactionWidth: semantic ? 24 : 8,
-      data: { points: edge.points, kind: source?.kind ?? 'membership', label: semantic ? source?.label : undefined, explanation: source?.explanation } satisfies RoutedEdgeData,
-      markerEnd: semantic ? { type: MarkerType.ArrowClosed, width: 20, height: 20, color: 'var(--vscode-charts-purple)' } : undefined,
-      style: semantic ? { stroke: 'var(--vscode-charts-purple)', strokeWidth: focused || edge.id === selectedEdgeId ? 3.2 : 2.3, opacity: dimmed ? 0.12 : focused ? 1 : 0.82 } : isRoot ? { stroke: 'var(--vscode-descriptionForeground)', strokeWidth: 1, strokeDasharray: '2 6', opacity: 0.2 } : { stroke: 'var(--vscode-descriptionForeground)', strokeWidth: 1.15, opacity: relatedAreaIds.size > 0 && !relatedAreaIds.has(edge.source.slice('architecture:area:'.length)) ? 0.14 : 0.4 },
+    const structural = source?.kind === 'root' || source?.kind === 'membership';
+    const opacity = dimmed ? 0.12 : focused ? 1 : 0.82;
+    const structuralAreaId = isRoot ? edge.target.slice('architecture:area:'.length) : edge.source.slice('architecture:area:'.length);
+    const structuralOpacity = relatedAreaIds.size > 0 && !relatedAreaIds.has(structuralAreaId) ? 0.28 : isRoot ? 0.58 : 0.66;
+    return { id: edge.id, source: edge.source, target: edge.target, type: 'routed', selected: edge.id === selectedEdgeId, selectable: semantic, interactionWidth: semantic ? 24 : 8, animated: false,
+      data: { points: edge.points, kind: source?.kind ?? 'membership', label, explanation: source?.explanation, labelOpacity: semantic ? opacity : structural ? structuralOpacity : undefined, labelEmphasized: focused || edge.id === selectedEdgeId, labelStructural: structural } satisfies RoutedEdgeData,
+      // `label` is resolved from the relationship type before this point, so
+      // a semantic arrowhead can never be emitted without readable text.
+      markerEnd: semantic && label ? { type: MarkerType.ArrowClosed, width: 20, height: 20, color: 'var(--vscode-charts-purple)' } : undefined,
+      style: semantic ? { stroke: 'var(--vscode-charts-purple)', strokeWidth: focused || edge.id === selectedEdgeId ? 3.2 : 2.3, opacity } : isRoot ? { stroke: 'var(--vscode-descriptionForeground)', strokeWidth: 1.35, strokeDasharray: '2 6', opacity: structuralOpacity } : { stroke: 'var(--vscode-descriptionForeground)', strokeWidth: 1.35, strokeDasharray: '3 5', opacity: structuralOpacity },
     };
   }), [layout.edges, edgeById, focusAreaId, focusEdgeId, relatedAreaIds, selectedEdgeId]);
 
@@ -142,21 +172,20 @@ export function ArchitectureGraphCanvas({ architecture, files, projectName, sele
   return <ReactFlow
     nodes={flowNodes} edges={flowEdges} nodeTypes={{ ...FILE_NODE_TYPES, ...ARCHITECTURE_NODE_TYPES }} edgeTypes={ROUTED_EDGE_TYPES}
     onNodeClick={(_event, node) => { if (node.id.startsWith('architecture:area:')) { setSelectedArea(node.id.slice('architecture:area:'.length)); setSelectedEdgeId(null); } else if (!node.id.startsWith('architecture:')) onSelectFile(node.id); }}
-    onNodeMouseEnter={(_event, node) => { if (node.id.startsWith('architecture:area:')) setHoveredArea(node.id.slice('architecture:area:'.length)); }}
-    onNodeMouseLeave={() => setHoveredArea(null)}
+    onNodeMouseEnter={(_event, node) => { if (node.id.startsWith('architecture:area:')) beginAreaHover(node.id.slice('architecture:area:'.length)); }}
+    onNodeMouseLeave={endAreaHover}
     onNodeDoubleClick={(_event, node) => { if (node.id.startsWith('architecture:area:')) toggleArea(node.id.slice('architecture:area:'.length), false); }}
     onEdgeClick={(_event, edge) => { if (edgeById.get(edge.id)?.kind === 'architecture') { setSelectedEdgeId(edge.id); setSelectedArea(null); } }}
-    onEdgeMouseEnter={(_event, edge) => { if (edgeById.get(edge.id)?.kind === 'architecture') setHoveredEdgeId(edge.id); }}
-    onEdgeMouseLeave={() => setHoveredEdgeId(null)} onPaneClick={() => { setSelectedArea(null); setSelectedEdgeId(null); }}
+    onPaneClick={() => { setSelectedArea(null); setSelectedEdgeId(null); }}
     minZoom={0.1} maxZoom={2} proOptions={{ hideAttribution: true }}
   >
     <Background gap={24} /><Controls showInteractive={false} />
     <ArchitectureOverview layout={layout} edgeById={edgeById} onFit={() => void fitView(FIT_OPTIONS)} />
     <Panel position="top-left" className="graph-search-panel"><input className="ai-text-input graph-search-input" type="text" placeholder="Search files…" value={search} onChange={(event) => { const next = event.target.value; setSearch(next); const match = files.filter((file) => file.file.toLowerCase().includes(next.trim().toLowerCase())).sort((a, b) => a.file.localeCompare(b.file))[0]; if (match && next.trim()) revealFile(match.file); }} onKeyDown={(event) => { if (event.key === 'Enter' && searchMatches[0]) revealFile(searchMatches[0].file); }} />{search ? <div className="graph-search-count">{searchMatches.length} match{searchMatches.length === 1 ? '' : 'es'}</div> : null}<div className="architecture-provenance">AI-interpreted from verified scanner evidence</div></Panel>
     <Panel position="top-right" className="graph-toggle-panel"><button className="graph-scope-button" onClick={onBack}>Dependencies</button><button className="graph-scope-button active">Architecture</button><button className="architecture-help-button" onClick={() => setShowHelp((current) => !current)} aria-expanded={showHelp}>How to read this map?</button><button className="ai-link-button" onClick={() => void fitView(FIT_OPTIONS)}>Fit to Screen</button></Panel>
-    {showHelp ? <Panel position="top-right" className="architecture-help-panel"><strong>Reading the map</strong><span>Position follows architectural role and semantic flow.</span><span>Arrow + verb means one area interacts with another.</span><span>Thin connector means a file belongs to an area.</span><span>Click an arrow for evidence; click an area to focus it.</span></Panel> : null}
+    {showHelp ? <Panel position="top-right" className="architecture-help-panel"><strong>Reading the map</strong><span>Position follows architectural role and semantic flow.</span><span>Purple arrow + verb means one area interacts with another.</span><span>Grey connector + contains means project or area membership.</span><span>Click an arrow for evidence; click an area to focus it.</span></Panel> : null}
     {selectedRelationship?.kind === 'architecture' ? <Panel position="bottom-center" className="architecture-inspector"><button className="architecture-inspector-close" onClick={() => setSelectedEdgeId(null)} aria-label="Close relationship details">×</button><strong>{areaNameById.get(selectedRelationship.source.slice('architecture:area:'.length))} <span>→ {selectedRelationship.label} →</span> {areaNameById.get(selectedRelationship.target.slice('architecture:area:'.length))}</strong><p>{selectedRelationship.explanation}</p><small>Evidence from verified project files</small><div className="architecture-evidence">{selectedRelationship.evidenceFiles?.length ? selectedRelationship.evidenceFiles.map((file) => <button key={file} onClick={() => onSelectFile(file)}>{file}</button>) : <span>No specific file evidence available.</span>}</div></Panel> : null}
     {selectedArea && !selectedRelationship ? <Panel position="bottom-center" className="architecture-inspector architecture-area-inspector"><button className="architecture-inspector-close" onClick={() => setSelectedArea(null)} aria-label="Close area details">×</button><strong>{areaNameById.get(selectedArea)}</strong><div className="architecture-relationship-summary"><span>Incoming</span>{incoming.length ? incoming.map((edge) => <button key={edge.id} onClick={() => { setSelectedEdgeId(edge.id); setSelectedArea(null); }}>← {areaNameById.get(edge.source.slice('architecture:area:'.length))} · {edge.label}</button>) : <small>None</small>}<span>Outgoing</span>{outgoing.length ? outgoing.map((edge) => <button key={edge.id} onClick={() => { setSelectedEdgeId(edge.id); setSelectedArea(null); }}>→ {areaNameById.get(edge.target.slice('architecture:area:'.length))} · {edge.label}</button>) : <small>None</small>}</div></Panel> : null}
-    <Panel position="bottom-left" className="graph-legend-panel architecture-legend"><span>Arrow: architecture interaction · thin connector: membership</span></Panel>
+    <Panel position="bottom-left" className="graph-legend-panel architecture-legend"><span>Purple arrow: architecture interaction · grey contains: hierarchy / membership</span></Panel>
   </ReactFlow>;
 }

@@ -299,7 +299,10 @@ function GraphInner({ nodes, edges, selectedFile, onSelectFile, architecture, ar
           kind: edge.id.startsWith('learn:') ? 'learning' : 'import',
         } satisfies RoutedEdgeData,
         markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14 },
-        animated: !edge.id.startsWith('learn:') && hoveredFile !== null && edge.source === hoveredFile,
+        // Hover should clarify a relationship, not start an animated dash
+        // loop. The changing SVG dash animation was visually noisy and could
+        // appear to flash while a pointer crossed connected edge hit areas.
+        animated: false,
         style: {
           opacity: edge.id.startsWith('learn:') ? 0.9 : hoveredFile === null || edge.source === hoveredFile || edge.target === hoveredFile ? 0.65 : 0.1,
           strokeWidth: edge.id.startsWith('learn:') ? 2 : hoveredFile !== null && (edge.source === hoveredFile || edge.target === hoveredFile) ? 2.5 : 1.2,

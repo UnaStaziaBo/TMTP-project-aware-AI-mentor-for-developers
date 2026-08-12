@@ -1343,17 +1343,30 @@ body.graph-mode #root {
 .architecture-map-container { height: 100%; overflow: auto; padding: 18px; box-sizing: border-box; }
 .architecture-map-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 18px; }
 
-.architecture-graph-node { width: 100%; height: 100%; box-sizing: border-box; border-radius: 10px; padding: 12px; background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background)); color: var(--vscode-foreground); box-shadow: 0 2px 7px rgba(0, 0, 0, 0.2); }
+.architecture-graph-node { width: 100%; height: 100%; box-sizing: border-box; border-radius: 10px; padding: 13px; background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background)); color: var(--vscode-foreground); box-shadow: 0 2px 7px rgba(0, 0, 0, 0.2); }
 .architecture-graph-root { display: flex; flex-direction: column; justify-content: center; border: 2px solid var(--vscode-charts-blue); text-align: center; }
-.architecture-graph-area { border: 1px solid var(--vscode-charts-purple); border-left: 4px solid var(--vscode-charts-purple); }
+.architecture-graph-area { display: flex; flex-direction: column; border: 1px solid var(--vscode-charts-purple); border-left: 4px solid var(--vscode-charts-purple); }
+.architecture-graph-node .react-flow__handle { pointer-events: none; }
 .architecture-graph-selected { box-shadow: 0 0 0 2px var(--vscode-focusBorder); }
 .architecture-graph-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 700; text-transform: uppercase; }
-.architecture-graph-purpose { display: -webkit-box; margin-top: 8px; overflow: hidden; color: var(--vscode-descriptionForeground); font-size: 11px; line-height: 1.3; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.architecture-graph-role { margin-top: 6px; color: var(--vscode-charts-purple); font-size: 9px; font-weight: 700; letter-spacing: .08em; }
-.architecture-graph-count, .architecture-graph-root-label { margin-top: 8px; color: var(--vscode-descriptionForeground); font-size: 10px; }
-.architecture-graph-actions { display: flex; gap: 6px; margin-top: 8px; }
-.architecture-graph-actions button { border: 0; border-radius: 4px; padding: 3px 6px; background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); cursor: pointer; font-size: 10px; }
-.architecture-edge-label { fill: var(--vscode-editor-foreground); font-size: 10px; font-weight: 700; paint-order: stroke; stroke: var(--vscode-editor-background); stroke-width: 3px; }
+.architecture-graph-purpose { display: -webkit-box; min-height: 43px; margin-top: 10px; overflow: hidden; color: var(--vscode-descriptionForeground); font-size: 11px; line-height: 1.3; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.architecture-graph-role { margin-top: 8px; color: var(--vscode-charts-purple); font-size: 9px; font-weight: 700; letter-spacing: .08em; }
+.architecture-graph-count, .architecture-graph-root-label { margin-top: 6px; color: var(--vscode-descriptionForeground); font-size: 10px; }
+.architecture-graph-actions { display: flex; gap: 6px; margin-top: 10px; }
+.architecture-graph-actions button { border: 0; border-radius: 4px; padding: 4px 8px; background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); cursor: pointer; font-size: 11px; }
+.architecture-edge-label-pill { fill: var(--vscode-editorWidget-background, var(--vscode-editor-background)); stroke: var(--vscode-widget-border, transparent); stroke-width: .5px; }
+.architecture-edge-label { fill: var(--vscode-editor-foreground); font-size: 11px; font-weight: 700; paint-order: stroke; stroke: var(--vscode-editorWidget-background, var(--vscode-editor-background)); stroke-width: 2px; }
+.architecture-edge-label-pill, .architecture-edge-label { pointer-events: none; }
+.architecture-edge-label-emphasized .architecture-edge-label-pill { stroke: var(--vscode-charts-purple); stroke-width: 1px; }
+.architecture-structural-label .architecture-edge-label-pill { fill: var(--vscode-editor-background); stroke: var(--vscode-descriptionForeground); stroke-width: .5px; }
+.architecture-structural-label .architecture-edge-label { fill: var(--vscode-descriptionForeground); font-size: 10px; font-weight: 600; stroke: var(--vscode-editor-background); }
+
+/* Edge emphasis is static. This also protects the graph from React Flow's
+   built-in dash animation if an edge is ever marked animated internally. */
+.react-flow__edge.animated path,
+.react-flow__edge.animated path.react-flow__edge-interaction {
+  animation: none !important;
+}
 .architecture-provenance { margin-top: 5px; color: var(--vscode-descriptionForeground); font-size: 10px; }
 .architecture-help-button { border: 1px solid var(--vscode-widget-border, transparent); border-radius: 4px; padding: 4px 7px; background: transparent; color: var(--vscode-descriptionForeground); cursor: pointer; font-size: 11px; }
 .architecture-help-panel { display: flex; width: 230px; flex-direction: column; gap: 5px; margin-top: 38px; padding: 10px; border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border)); border-radius: 6px; background: var(--vscode-editorWidget-background); color: var(--vscode-descriptionForeground); font-size: 11px; line-height: 1.35; box-shadow: 0 4px 14px rgba(0, 0, 0, .25); }

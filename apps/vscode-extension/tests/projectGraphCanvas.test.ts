@@ -242,7 +242,12 @@ describe('ProjectGraphCanvas (real DOM via jsdom)', () => {
 
       const architectureNodes = [...container.querySelectorAll('.architecture-graph-node')];
       assert.equal(architectureNodes.length, 3, 'root and validated areas should render on the canvas');
+      const entryArea = architectureNodes.find((node) => node.textContent?.includes('Entry'))!;
+      assert.ok(entryArea.querySelector('.architecture-graph-purpose')?.textContent?.includes('Starts the app.'));
+      assert.ok(entryArea.querySelector('.architecture-graph-actions button'), 'the expand action belongs inside its architecture card');
+      assert.ok(entryArea.closest('.react-flow__node')?.getAttribute('style')?.includes('width: 280px'), 'ELK uses the larger architecture-card width');
       assert.ok(container.textContent?.includes('Architecture overview'));
+      assert.equal(container.querySelectorAll('.react-flow__edge.animated').length, 0, 'architecture edges remain static during graph interactions');
       assert.equal(requests, 0, 'viewing cached architecture must not trigger another AI request');
 
       const help = [...container.querySelectorAll('button')].find((button) => button.textContent === 'How to read this map?');

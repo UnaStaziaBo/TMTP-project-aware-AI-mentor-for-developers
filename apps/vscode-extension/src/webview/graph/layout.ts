@@ -28,6 +28,9 @@ export interface LayoutResult {
 // "large" node next to several "small" ones wasted enormous vertical space.
 export const NODE_WIDTH = 230;
 export const NODE_HEIGHT = 112;
+/** Larger architecture areas need room for a readable purpose and actions. */
+export const ARCHITECTURE_AREA_WIDTH = 280;
+export const ARCHITECTURE_AREA_HEIGHT = 164;
 
 // Reused across layout calls — constructing it is cheap, but there's no
 // reason to throw it away each time.
@@ -35,6 +38,13 @@ const elk = new ELK();
 
 function toPoint(point: { x: number; y: number }): Point {
   return { x: point.x, y: point.y };
+}
+
+function dimensionsForNode(node: GraphNodeView, architecture: boolean): { width: number; height: number } {
+  if (architecture && (node as GraphNodeView & { entityType?: string }).entityType === 'architecture-area') {
+    return { width: ARCHITECTURE_AREA_WIDTH, height: ARCHITECTURE_AREA_HEIGHT };
+  }
+  return { width: NODE_WIDTH, height: NODE_HEIGHT };
 }
 
 function routeLearningEdge(
@@ -139,18 +149,22 @@ async function layoutGraph(
       'elk.layered.cycleBreaking.strategy': 'GREEDY',
       ...(architecture ? {
         'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
-        'elk.spacing.nodeNode': '70',
-        'elk.layered.spacing.nodeNodeBetweenLayers': '125',
+        'elk.spacing.nodeNode': '88',
+        'elk.layered.spacing.nodeNodeBetweenLayers': '150',
+        'elk.spacing.edgeNode': '40',
+        // Keep parallel semantic paths apart so each relationship has room
+        // for its own label without perturbing the dependency graph.
+        'elk.spacing.edgeEdge': '30',
+        'elk.layered.mergeEdges': 'false',
       } : {}),
       // Unrelated files (no import path between them) form their own visual
       // clusters instead of being interleaved into one hairball.
       'elk.separateConnectedComponents': 'true',
-      'elk.spacing.componentComponent': '90',
+      'elk.spacing.componentComponent': architecture ? '120' : '90',
     },
     children: sortedNodes.map((node) => ({
       id: node.file,
-      width: NODE_WIDTH,
-      height: NODE_HEIGHT,
+      ...dimensionsForNode(node, architecture),
       ...(architecture ? {
         layoutOptions: node.file === 'architecture:project'
           ? { 'elk.layered.layering.layerConstraint': 'FIRST' }
@@ -172,10 +186,11 @@ async function layoutGraph(
   const positionedByFile = new Map<string, PositionedGraphNode>();
   for (const node of sortedNodes) {
     const placed = positionByFile.get(node.file);
+    const dimensions = dimensionsForNode(node, architecture);
     positionedByFile.set(node.file, {
       ...node,
-      width: NODE_WIDTH,
-      height: NODE_HEIGHT,
+      width: dimensions.width,
+      height: dimensions.height,
       x: placed?.x ?? 0,
       y: placed?.y ?? 0,
     });

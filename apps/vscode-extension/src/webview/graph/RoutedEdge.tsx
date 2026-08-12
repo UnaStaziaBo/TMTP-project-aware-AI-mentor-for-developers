@@ -1,12 +1,15 @@
 import React from 'react';
 import { BaseEdge, type EdgeProps } from '@xyflow/react';
-import { buildSmoothPath, type Point } from './edgePath.js';
+import { buildSmoothPath, edgeLabelPoint, type Point } from './edgePath.js';
 
 export interface RoutedEdgeData extends Record<string, unknown> {
   points: Point[];
   kind: 'import' | 'learning' | 'architecture' | 'membership' | 'root';
   label?: string;
   explanation?: string;
+  labelOpacity?: number;
+  labelEmphasized?: boolean;
+  labelStructural?: boolean;
 }
 
 /**
@@ -22,15 +25,19 @@ export function RoutedEdge({ data, style, markerEnd }: EdgeProps) {
   }
 
   const edgeData = data as RoutedEdgeData | undefined;
-  const label = edgeData?.label;
+  const label = edgeData?.label?.trim();
   if (!label) {
     return <BaseEdge path={buildSmoothPath(points)} style={style} markerEnd={markerEnd} />;
   }
-  const middle = points[Math.floor(points.length / 2)]!;
-  return <g aria-label={edgeData?.explanation ?? label}>
+  const middle = edgeLabelPoint(points);
+  const labelWidth = Math.max(42, Math.min(116, label.length * 6.7 + 16));
+  return <>
     <BaseEdge path={buildSmoothPath(points)} style={style} markerEnd={markerEnd} />
-    <text x={middle.x} y={middle.y - 8} className="architecture-edge-label" textAnchor="middle">{label}</text>
-  </g>;
+    <g aria-label={edgeData?.explanation ?? label} className={`${edgeData?.labelEmphasized ? 'architecture-edge-label-emphasized' : ''} ${edgeData?.labelStructural ? 'architecture-structural-label' : ''}`} opacity={edgeData?.labelOpacity}>
+      <rect className="architecture-edge-label-pill" x={middle.x - labelWidth / 2} y={middle.y - 15} width={labelWidth} height={18} rx={9} />
+      <text x={middle.x} y={middle.y - 3} className="architecture-edge-label" textAnchor="middle">{label}</text>
+    </g>
+  </>;
 }
 
 export const ROUTED_EDGE_TYPES = { routed: RoutedEdge };

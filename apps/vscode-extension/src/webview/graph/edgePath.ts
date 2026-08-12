@@ -4,6 +4,30 @@ export interface Point {
 }
 
 /**
+ * Finds the length-weighted midpoint of an ELK route. Unlike choosing the
+ * middle bend by array index, this stays attached to the useful central
+ * segment of a long or curved edge.
+ */
+export function edgeLabelPoint(points: readonly Point[]): Point {
+  if (points.length === 0) return { x: 0, y: 0 };
+  if (points.length === 1) return points[0]!;
+  const segments = points.slice(1).map((point, index) => {
+    const start = points[index]!;
+    return { start, end: point, length: Math.hypot(point.x - start.x, point.y - start.y) };
+  });
+  const total = segments.reduce((sum, segment) => sum + segment.length, 0);
+  let traversed = 0;
+  for (const segment of segments) {
+    if (traversed + segment.length >= total / 2 && segment.length > 0) {
+      const ratio = (total / 2 - traversed) / segment.length;
+      return { x: segment.start.x + (segment.end.x - segment.start.x) * ratio, y: segment.start.y + (segment.end.y - segment.start.y) * ratio };
+    }
+    traversed += segment.length;
+  }
+  return points[points.length - 1]!;
+}
+
+/**
  * Converts a polyline (ELK's routed bend points) into a smooth SVG path
  * using quadratic curves through the midpoint of each segment. This is the
  * standard "smooth a polyline" trick: it removes the sharp corner at every
