@@ -11,8 +11,9 @@ import {
   type PipelineStage,
   type ProjectScanResult,
 } from '@tmpt/scanner';
-import { createAIProvider, type FileLesson, type FileSummary, type KeyConstruct, type PracticePlan } from '@tmpt/ai';
+import { createAIProvider, type ArchitectureModel, type FileLesson, type FileSummary, type KeyConstruct, type PracticePlan } from '@tmpt/ai';
 import { getAIConfig, saveAIConfig } from './ai/aiConfig.js';
+import { buildArchitectureContext } from './architectureContext.js';
 import { determinePrimaryLanguage } from './languageProfile.js';
 import { buildScenarioPlan, buildSingleFileScenarioPlan } from './practicePlanner.js';
 import { TmtpSidebarProvider, type SidebarSnapshot } from './sidebarView.js';
@@ -25,6 +26,7 @@ const PRACTICE_PLAN_CACHE_KEY = 'tmtp.ai.practicePlan';
 const FILE_PRACTICE_CACHE_KEY = 'tmtp.ai.filePractice.v2';
 const LEARNING_PROGRESS_CACHE_KEY = 'tmtp.ai.learningProgress';
 const COMMENTARY_READ_CACHE_KEY = 'tmtp.ai.commentaryRead';
+const ARCHITECTURE_CACHE_KEY = 'tmtp.ai.architecture.v1';
 
 let panel: vscode.WebviewPanel | undefined;
 let latestResult: ProjectScanResult | undefined;
@@ -42,6 +44,7 @@ let commentaryController: vscode.CommentController | undefined;
 const commentaryThreads = new Map<string, vscode.CommentThread[]>();
 const commentaryEntries = new Map<string, { thread: vscode.CommentThread; lesson: FileLesson; construct: KeyConstruct; index: number }>();
 let commentaryRead = new Set<string>();
+let architectureCache: { fingerprint: string; provider: string; model: string; architecture: ArchitectureModel } | undefined;
 
 function commentaryReadKey(file: string, construct: KeyConstruct): string {
   // FNV-1a keeps persisted keys compact while tying read state to the actual
@@ -219,6 +222,9 @@ async function runScan(projectPath: string, post: (message: ExtensionMessage) =>
       post({ type: 'stageComplete', stage: stage.key, elapsedMs: performance.now() - stageStarted, result });
     }
     latestResult = result;
+    if (architectureCache && architectureCache.fingerprint !== buildArchitectureContext(result).fingerprint) {
+      architectureCache = undefined;
+    }
     post({ type: 'scanComplete', totalElapsedMs: performance.now() - started });
     void refreshSidebar();
   } catch (error) {
@@ -321,6 +327,32 @@ async function handleExplainFile(
     presentLessonBesideCode(folder.uri.fsPath, lesson);
   } catch (error) {
     post({ type: 'fileLessonError', file, message: error instanceof Error ? error.message : String(error) });
+  }
+}
+
+async function handleRequestArchitecture(context: vscode.ExtensionContext, post: (message: ExtensionMessage) => void): Promise<void> {
+  if (!latestResult) {
+    post({ type: 'architectureError', message: 'Run a scan before requesting architecture analysis. You can continue exploring verified dependencies.' });
+    return;
+  }
+  const stored = await getAIConfig(context);
+  if (!stored) {
+    post({ type: 'architectureError', message: 'Configure an AI provider to generate an architecture map. Dependencies remain available.' });
+    return;
+  }
+  const architectureContext = buildArchitectureContext(latestResult);
+  if (architectureCache?.fingerprint === architectureContext.fingerprint && architectureCache.provider === stored.config.provider && architectureCache.model === stored.config.model) {
+    post({ type: 'architectureResult', architecture: architectureCache.architecture, cached: true });
+    return;
+  }
+  post({ type: 'architectureGenerating' });
+  try {
+    const architecture = await createAIProvider(stored.config.provider).generateArchitecture(architectureContext, { apiKey: stored.apiKey, model: stored.config.model });
+    architectureCache = { fingerprint: architectureContext.fingerprint, provider: stored.config.provider, model: stored.config.model, architecture };
+    await context.workspaceState.update(ARCHITECTURE_CACHE_KEY, architectureCache);
+    post({ type: 'architectureResult', architecture, cached: false });
+  } catch (error) {
+    post({ type: 'architectureError', message: error instanceof Error ? error.message : String(error) });
   }
 }
 
@@ -555,6 +587,9 @@ function openOverviewPanel(
       case 'explainFile':
         void handleExplainFile(context, message.file, post);
         break;
+      case 'requestArchitecture':
+        void handleRequestArchitecture(context, post);
+        break;
       case 'submitConfidenceProfile':
         void handleSubmitConfidenceProfile(context, message.ratings, post);
         break;
@@ -616,6 +651,7 @@ export function activate(context: vscode.ExtensionContext): void {
   practicedFiles = new Set(storedProgress?.practiced ?? []);
   masteredFiles = new Set(storedProgress?.mastered ?? []);
   commentaryRead = new Set(context.workspaceState.get<string[]>(COMMENTARY_READ_CACHE_KEY) ?? []);
+  architectureCache = context.workspaceState.get<typeof architectureCache>(ARCHITECTURE_CACHE_KEY);
   commentaryController = vscode.comments.createCommentController('tmtp.aiCommentary', 'TMTP AI Commentary');
 
   sidebarProvider = new TmtpSidebarProvider(

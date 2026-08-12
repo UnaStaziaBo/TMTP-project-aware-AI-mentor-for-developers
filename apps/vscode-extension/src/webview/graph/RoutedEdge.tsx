@@ -4,7 +4,9 @@ import { buildSmoothPath, type Point } from './edgePath.js';
 
 export interface RoutedEdgeData extends Record<string, unknown> {
   points: Point[];
-  kind: 'import' | 'learning';
+  kind: 'import' | 'learning' | 'architecture' | 'membership';
+  label?: string;
+  explanation?: string;
 }
 
 /**
@@ -19,7 +21,16 @@ export function RoutedEdge({ data, style, markerEnd }: EdgeProps) {
     return null;
   }
 
-  return <BaseEdge path={buildSmoothPath(points)} style={style} markerEnd={markerEnd} />;
+  const edgeData = data as RoutedEdgeData | undefined;
+  const label = edgeData?.label;
+  if (!label) {
+    return <BaseEdge path={buildSmoothPath(points)} style={style} markerEnd={markerEnd} />;
+  }
+  const middle = points[Math.floor(points.length / 2)]!;
+  return <g aria-label={edgeData?.explanation ?? label}>
+    <BaseEdge path={buildSmoothPath(points)} style={style} markerEnd={markerEnd} />
+    <text x={middle.x} y={middle.y - 8} className="architecture-edge-label" textAnchor="middle">{label}</text>
+  </g>;
 }
 
 export const ROUTED_EDGE_TYPES = { routed: RoutedEdge };

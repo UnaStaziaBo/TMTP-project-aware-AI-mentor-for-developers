@@ -2,6 +2,7 @@ import type { FileLesson } from '../types/FileLesson.js';
 import type { FileLessonContext } from '../types/FileLessonContext.js';
 import type { PracticePlan } from '../types/PracticePlan.js';
 import type { PracticePlanContext } from '../types/PracticePlanContext.js';
+import type { ArchitectureModel, ProjectArchitectureContext } from '../types/Architecture.js';
 
 export interface AIProviderCredentials {
   apiKey: string;
@@ -23,4 +24,5 @@ export interface AIProvider {
   testConnection(credentials: AIProviderCredentials): Promise<TestConnectionResult>;
   generateFileLesson(context: FileLessonContext, credentials: AIProviderCredentials): Promise<FileLesson>;
   generatePracticePlan(context: PracticePlanContext, credentials: AIProviderCredentials): Promise<PracticePlan>;
+  generateArchitecture(context: ProjectArchitectureContext, credentials: AIProviderCredentials): Promise<ArchitectureModel>;
 }

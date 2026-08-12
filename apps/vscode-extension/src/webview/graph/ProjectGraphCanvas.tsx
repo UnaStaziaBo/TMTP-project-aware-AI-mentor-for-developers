@@ -15,6 +15,7 @@ import { GROUP_NODE_TYPES, type GroupFlowNode } from './GroupNode.js';
 import { ROUTED_EDGE_TYPES, type RoutedEdgeData } from './RoutedEdge.js';
 import { buildSmoothPath } from './edgePath.js';
 import type { GraphEdgeView, GraphNodeView } from '../../projectGraphView.js';
+import type { ArchitectureModel } from '@tmpt/ai';
 import {
   buildRepositoryHierarchy,
   expansionForFile,
@@ -24,11 +25,22 @@ import {
   type GraphGroupView,
 } from './repositoryHierarchy.js';
 
+// Loading the architecture renderer only when the user selects that mode
+// keeps React Flow's dependency canvas as the stable initial surface.
+const ArchitectureGraphCanvas = React.lazy(() =>
+  import('./ArchitectureGraphCanvas.js').then(({ ArchitectureGraphCanvas: Canvas }) => ({ default: Canvas })),
+);
+
 export interface ProjectGraphCanvasProps {
   nodes: GraphNodeView[];
   edges: GraphEdgeView[];
   selectedFile: string | null;
   onSelectFile: (file: string) => void;
+  architecture?: ArchitectureModel;
+  architectureStatus?: 'idle' | 'generating' | 'error' | 'ready';
+  architectureError?: string;
+  onRequestArchitecture?: () => void;
+  projectName?: string;
 }
 
 const EMPTY_LAYOUT: LayoutResult = { nodes: [], edges: [] };
@@ -80,7 +92,8 @@ function GraphOverview({ layout, onFit }: { layout: LayoutResult; onFit: () => v
   );
 }
 
-function GraphInner({ nodes, edges, selectedFile, onSelectFile }: ProjectGraphCanvasProps) {
+function GraphInner({ nodes, edges, selectedFile, onSelectFile, architecture, architectureStatus = 'idle', architectureError, onRequestArchitecture, projectName }: ProjectGraphCanvasProps) {
+  const [mapMode, setMapMode] = useState<'dependencies' | 'architecture'>('dependencies');
   const [scope, setScope] = useState<GraphScope>('core');
   const [search, setSearch] = useState('');
   const [hoveredFile, setHoveredFile] = useState<string | null>(null);
@@ -308,6 +321,10 @@ function GraphInner({ nodes, edges, selectedFile, onSelectFile }: ProjectGraphCa
     void fitView({ nodes: [{ id: file }], duration: 400, maxZoom: 1.2, padding: 0.3 });
   }
 
+  if (mapMode === 'architecture') {
+    if (architecture) return <React.Suspense fallback={<div className="empty-line">Opening architecture map…</div>}><ReactFlowProvider><ArchitectureGraphCanvas architecture={architecture} files={nodes} projectName={projectName} selectedFile={selectedFile} onSelectFile={onSelectFile} onBack={() => setMapMode('dependencies')} /></ReactFlowProvider></React.Suspense>;
+    return <div className="architecture-map-container"><div className="architecture-map-toolbar"><button className="graph-scope-button" onClick={() => setMapMode('dependencies')}>Dependencies</button><button className="graph-scope-button active">Architecture</button><button className="ai-link-button" onClick={() => onRequestArchitecture?.()}>{architectureStatus === 'generating' ? 'Analyzing…' : 'Generate architecture map'}</button></div>{architectureStatus === 'generating' ? <div className="empty-line">Analyzing verified project evidence…</div> : <div className="empty-line">{architectureStatus === 'error' ? `Architecture analysis is unavailable: ${architectureError}. You can continue exploring verified dependencies.` : 'Generate an AI-assisted architecture map from verified scanner evidence. The dependency graph remains unchanged.'}</div>}</div>;
+  }
   return (
     <ReactFlow
       nodes={flowNodes}
@@ -354,6 +371,8 @@ function GraphInner({ nodes, edges, selectedFile, onSelectFile }: ProjectGraphCa
         {isLayouting ? <div className="graph-search-count">Arranging…</div> : null}
       </Panel>
       <Panel position="top-right" className="graph-toggle-panel">
+        <button className="graph-scope-button active" onClick={() => setMapMode('dependencies')}>Dependencies</button>
+        <button className="graph-scope-button" onClick={() => setMapMode('architecture')}>Architecture</button>
         <span className="graph-scope-label">View</span>
         {(['core', 'related', 'all'] as const).map((value) => (
           <button

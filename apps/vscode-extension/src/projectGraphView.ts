@@ -30,7 +30,7 @@ export interface GraphEdgeView {
   id: string;
   source: string;
   target: string;
-  kind?: 'import' | 'learning';
+  kind?: 'import' | 'learning' | 'architecture' | 'membership';
   /** Count and source pairs are retained when a collapsed group summarizes real imports. */
   underlyingEdgeCount?: number;
   underlyingFiles?: Array<[string, string]>;

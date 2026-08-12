@@ -209,4 +209,51 @@ describe('ProjectGraphCanvas (real DOM via jsdom)', () => {
       await tick(50);
     });
   });
+
+  it('switches to the cached architecture projection without requesting another analysis', async () => {
+    await withGraphDom(async () => {
+      const { createElement } = await import('react');
+      const { createRoot } = await import('react-dom/client');
+      const { ProjectGraphCanvas } = await import('../src/webview/graph/ProjectGraphCanvas.js');
+      const nodes = [
+        { file: 'src/main.ts', title: 'main.ts', area: 'Source', description: 'Entry point', score: 70, confidence: 0.7, tier: 'large' as const, learningStatus: { icon: '⚪', label: 'Not visited' }, hasEdge: true },
+        { file: 'src/adapter.ts', title: 'adapter.ts', area: 'Source', description: 'Adapter', score: 30, confidence: 0.3, tier: 'medium' as const, learningStatus: { icon: '⚪', label: 'Not visited' }, hasEdge: true },
+      ];
+      const architecture = {
+        fingerprint: 'fixture', summary: 'Fixture', warnings: [], fileRoles: [],
+        areas: [
+          { id: 'entry', name: 'Entry', shortPurpose: 'Starts the app.', files: ['src/main.ts'], importantFiles: ['src/main.ts'], evidenceFiles: ['src/main.ts'], confidence: 0.8 },
+          { id: 'adapter', name: 'Adapter', shortPurpose: 'Adapts services.', files: ['src/adapter.ts'], importantFiles: ['src/adapter.ts'], evidenceFiles: ['src/adapter.ts'], confidence: 0.7 },
+        ],
+        relationships: [{ sourceAreaId: 'entry', targetAreaId: 'adapter', label: 'uses', explanation: 'Entry uses adapter.', evidenceFiles: ['src/main.ts'], confidence: 0.7 }],
+      };
+      let requests = 0;
+      const container = document.getElementById('app')!;
+      Object.defineProperty(container, 'clientWidth', { value: 1000, configurable: true });
+      Object.defineProperty(container, 'clientHeight', { value: 800, configurable: true });
+      const root = createRoot(container);
+      root.render(createElement(ProjectGraphCanvas, { nodes, edges: [], selectedFile: null, onSelectFile: () => {}, architecture, onRequestArchitecture: () => { requests += 1; } }));
+      await tick(150);
+
+      const architectureButton = [...container.querySelectorAll('button')].find((button) => button.textContent === 'Architecture');
+      assert.ok(architectureButton, 'expected the Architecture mode switch');
+      architectureButton!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      await tick(250);
+
+      const architectureNodes = [...container.querySelectorAll('.architecture-graph-node')];
+      assert.equal(architectureNodes.length, 3, 'root and validated areas should render on the canvas');
+      assert.ok(container.textContent?.includes('Architecture overview'));
+      assert.equal(requests, 0, 'viewing cached architecture must not trigger another AI request');
+
+      const expand = [...container.querySelectorAll('button')].find((button) => button.textContent === 'Expand');
+      assert.ok(expand, 'expected an architecture-area expansion affordance');
+      expand!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      await tick(300);
+      assert.ok([...container.querySelectorAll('.graph-node-title')].some((element) => element.textContent === 'adapter.ts'));
+      assert.equal(requests, 0, 'exploring the architecture canvas must not request analysis');
+
+      root.unmount();
+      await tick(50);
+    });
+  });
 });

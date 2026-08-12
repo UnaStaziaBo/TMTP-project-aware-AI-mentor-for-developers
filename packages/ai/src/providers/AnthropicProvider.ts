@@ -7,6 +7,9 @@ import type { FileLessonContext } from '../types/FileLessonContext.js';
 import type { PracticePlan } from '../types/PracticePlan.js';
 import type { PracticePlanContext } from '../types/PracticePlanContext.js';
 import type { AIProvider, AIProviderCredentials, TestConnectionResult } from './AIProvider.js';
+import { ARCHITECTURE_SYSTEM_PROMPT, buildArchitectureUserPrompt } from '../prompts/architecturePrompt.js';
+import { parseArchitectureModel } from '../validateArchitecture.js';
+import type { ArchitectureModel, ProjectArchitectureContext } from '../types/Architecture.js';
 
 const ANTHROPIC_BASE_URL = 'https://api.anthropic.com/v1';
 const ANTHROPIC_VERSION = '2023-06-01';
@@ -88,5 +91,9 @@ export class AnthropicProvider implements AIProvider {
       credentials,
     );
     return parsePracticePlan(raw, context.scenarios);
+  }
+
+  async generateArchitecture(context: ProjectArchitectureContext, credentials: AIProviderCredentials): Promise<ArchitectureModel> {
+    return parseArchitectureModel(context, await this.requestJSON(ARCHITECTURE_SYSTEM_PROMPT, buildArchitectureUserPrompt(context), credentials));
   }
 }

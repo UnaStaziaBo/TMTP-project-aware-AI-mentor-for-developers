@@ -1,5 +1,5 @@
 import type { ProjectScanResult } from '@tmpt/scanner';
-import type { AIProviderId, FileLesson, PracticePlan, TestConnectionResult } from '@tmpt/ai';
+import type { AIProviderId, ArchitectureModel, FileLesson, PracticePlan, TestConnectionResult } from '@tmpt/ai';
 
 export type StageKey =
   | 'filesystem'
@@ -45,6 +45,9 @@ export type ExtensionMessage =
   | { type: 'filePracticeGenerating'; file: string }
   | { type: 'filePracticeResult'; file: string; plan: PracticePlan; cached: boolean }
   | { type: 'filePracticeError'; file: string; message: string }
+  | { type: 'architectureGenerating' }
+  | { type: 'architectureResult'; architecture: ArchitectureModel; cached: boolean }
+  | { type: 'architectureError'; message: string }
   | {
       type: 'learningProgress';
       explained: string[];
@@ -66,4 +69,5 @@ export type WebviewMessage =
   | { type: 'submitConfidenceProfile'; ratings: Record<string, FileConfidence> }
   | { type: 'requestFilePractice'; file: string }
   | { type: 'recordPracticeAttempt'; file: string; correct: boolean }
-  | { type: 'markFileLearned'; file: string };
+  | { type: 'markFileLearned'; file: string }
+  | { type: 'requestArchitecture' };

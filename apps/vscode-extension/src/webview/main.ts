@@ -1,7 +1,7 @@
 import { createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { ProjectScanResult } from '@tmpt/scanner';
-import type { AIProviderId, FileLesson, PracticePlan } from '@tmpt/ai';
+import type { AIProviderId, ArchitectureModel, FileLesson, PracticePlan } from '@tmpt/ai';
 import { buildProjectGraphViewModel } from '../projectGraphView.js';
 import { ProjectGraphCanvas } from './graph/ProjectGraphCanvas.js';
 import { STAGES, type ExtensionMessage, type FileConfidence, type StageKey, type WorkspaceTab } from '../protocol.js';
@@ -119,6 +119,7 @@ interface State {
   practice: PracticeState;
   learningProgress: LearningProgressState;
   knowledgeMap: KnowledgeMapState;
+  architecture: { status: 'idle' | 'generating' | 'error' | 'ready'; model?: ArchitectureModel; error?: string };
 }
 
 const emptyResult: ProjectScanResult = {
@@ -159,6 +160,7 @@ const state: State = {
   practice: createInitialPracticeState(),
   learningProgress: { explained: new Set(), practiced: new Set(), mastered: new Set(), commentary: new Map() },
   knowledgeMap: { filePracticePlans: new Map() },
+  architecture: { status: 'idle' },
 };
 
 function learningStatusFor(file: string): { icon: string; label: string; progress: number } {
@@ -936,6 +938,11 @@ function updateGraphCanvas(): void {
       edges: model.edges,
       selectedFile: state.knowledgeMap.node?.file ?? null,
       onSelectFile: selectGraphNode,
+      architecture: state.architecture.model,
+      architectureStatus: state.architecture.status,
+      architectureError: state.architecture.error,
+      onRequestArchitecture: () => vscodeApi.postMessage({ type: 'requestArchitecture' }),
+      projectName: state.projectName,
     }),
   );
 }
@@ -1367,6 +1374,15 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
         state.knowledgeMap.node.practiceStatus = 'error';
         state.knowledgeMap.node.practiceError = message.message;
       }
+      break;
+    case 'architectureGenerating':
+      state.architecture = { status: 'generating', model: state.architecture.model };
+      break;
+    case 'architectureResult':
+      state.architecture = { status: 'ready', model: message.architecture };
+      break;
+    case 'architectureError':
+      state.architecture = { status: 'error', model: state.architecture.model, error: message.message };
       break;
     case 'learningProgress':
       state.learningProgress = {

@@ -1339,3 +1339,18 @@ body.graph-mode #root {
     animation: none;
   }
 }
+
+.architecture-map-container { height: 100%; overflow: auto; padding: 18px; box-sizing: border-box; }
+.architecture-map-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 18px; }
+
+.architecture-graph-node { width: 100%; height: 100%; box-sizing: border-box; border-radius: 10px; padding: 12px; background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background)); color: var(--vscode-foreground); box-shadow: 0 2px 7px rgba(0, 0, 0, 0.2); }
+.architecture-graph-root { display: flex; flex-direction: column; justify-content: center; border: 2px solid var(--vscode-charts-blue); text-align: center; }
+.architecture-graph-area { border: 1px solid var(--vscode-charts-purple); border-left: 4px solid var(--vscode-charts-purple); }
+.architecture-graph-selected { box-shadow: 0 0 0 2px var(--vscode-focusBorder); }
+.architecture-graph-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 700; text-transform: uppercase; }
+.architecture-graph-purpose { display: -webkit-box; margin-top: 8px; overflow: hidden; color: var(--vscode-descriptionForeground); font-size: 11px; line-height: 1.3; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.architecture-graph-count, .architecture-graph-root-label { margin-top: 8px; color: var(--vscode-descriptionForeground); font-size: 10px; }
+.architecture-graph-actions { display: flex; gap: 6px; margin-top: 8px; }
+.architecture-graph-actions button { border: 0; border-radius: 4px; padding: 3px 6px; background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); cursor: pointer; font-size: 10px; }
+.architecture-edge-label { fill: var(--vscode-editor-foreground); font-size: 10px; font-weight: 700; paint-order: stroke; stroke: var(--vscode-editor-background); stroke-width: 3px; }
+.architecture-provenance { margin-top: 5px; color: var(--vscode-descriptionForeground); font-size: 10px; }
