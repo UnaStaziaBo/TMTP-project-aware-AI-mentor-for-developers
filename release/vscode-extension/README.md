@@ -1,12 +1,21 @@
 # TMTP
 
+## Contributors
+
+- [Steve Michira](https://github.com/wise-wise) — [Code the Giant](https://codethegiant.vercel.app/)
+
 ### Understand the project before you modify it.
 
-TMTP—**Teach Me This Project**—is a VS Code extension that helps developers find their way through an unfamiliar codebase. It analyzes the repository first, shows where to begin, and then uses AI to explain the project through its real files and architectural decisions.
+TMTP-**Teach Me This Project**-is a VS Code extension that helps developers find their way through an unfamiliar codebase. It analyzes the repository first, shows where to begin, and then uses AI to explain the project through its real files and architectural decisions.
+
+![TMTP walkthrough](media/video/TMTPshort.gif)
+
+[Watch the full TMTP demo on YouTube](https://youtu.be/imx2xqSUQhk?si=glFkzc2FYiOqxTfT)
 
 <!-- [Get started](#installation) · [See how it works](#how-tmtp-works) · [View the roadmap](#roadmap) · [Report an issue](https://github.com/UnaStaziaBo/TMTP-project-aware-AI-mentor-for-developers/issues) -->
 
 > TMTP is an early public release. The deterministic analysis, project graph, guided lessons, practice flows, and progress tracking described below are implemented today. Current limitations are documented openly.
+
 
 ## The problem
 
@@ -76,20 +85,15 @@ Detection is heuristic rather than a full semantic build-system analysis. See [s
 
 ## Interactive Project Graph
 
-**The problem:** A directory tree hides how source files relate, while a dense dependency graph can become as difficult to read as the codebase itself.
+**The problem:** A directory tree does not explain the responsibilities and interactions that make up a project architecture.
 
-**What TMTP does:** The graph combines:
+**What TMTP does:** Project Graph opens directly into an AI-interpreted Architecture Graph grounded in verified scanner evidence. It shows a synthetic project root, architecture areas, their evidence-backed interactions, and canonical files on demand. The Architecture Navigator provides a compact topology, current-viewport indicator, area navigation, selected file-to-area orientation, and real file-level learning progress.
 
-- verified project-local imports shown as solid relationships;
-- a separately labelled, deterministic recommended lesson sequence;
-- **Core**, **Related**, and **All files** scopes;
-- search, zoom, pan, fit-to-screen, and a project overview;
-- incoming **used by** and outgoing **uses** highlighting;
-- per-file importance, learning rationale, and progress.
+Search, pan, zoom, Fit to Screen, relationship inspection, area expansion, canonical-file selection, and progress remain available directly in this graph. Dependency/import detection remains part of the deterministic scanner evidence pipeline, but the former Dependencies graph is not user-facing.
 
-**Why it matters:** You can distinguish how code is connected from how it may be useful to learn it. TMTP never presents a teaching relationship as a code dependency.
+**Why it matters:** You can orient yourself in the systems and responsibilities of an unfamiliar codebase without navigating a separate graph mode.
 
-Import extraction currently covers TypeScript/JavaScript relative imports and resolvable project-local Python imports. Other languages can still appear as files and starting points, but their import graphs may be sparse.
+Project Graph needs an AI provider configuration to generate an architecture model. TMTP reuses a compatible cached architecture model when available; without a configured API key it explains that configuration is required. Scanner analysis itself remains local and does not require an API key.
 
 ## Guided Project Tour
 
@@ -153,21 +157,6 @@ The Activity Bar Learning Home and Project Graph surface that state when you ret
 **Why it matters:** You can resume the learning journey instead of reconstructing what you already explored.
 
 Progress is file-level and intentionally simple. TMTP does not yet maintain a broader developer skills profile.
-
-## Screenshots
-
-The public screenshot set is being prepared for the Marketplace release. Each image below has a defined purpose and intended repository path so the final documentation can be completed without changing the product story.
-
-| Planned asset | What it should demonstrate |
-|---|---|
-| `apps/vscode-extension/media/screenshots/project-graph.png` | The Core graph, verified import edges, recommended lesson path, search, legend, and learning progress. |
-| `apps/vscode-extension/media/screenshots/starting-files.png` | Ranked starting-file cards with confidence, deterministic reasons, and file actions. |
-| `apps/vscode-extension/media/screenshots/guided-tour.png` | Project Context and Key Constructs for one real file. |
-| `apps/vscode-extension/media/screenshots/editor-commentary.png` | Native collapsible commentary anchored beside the relevant source. |
-| `apps/vscode-extension/media/screenshots/day-one-practice.png` | A realistic architectural scenario with answer feedback. |
-| `apps/vscode-extension/media/screenshots/learning-home.png` | The Activity Bar entry point, project status, progress, and learning destinations. |
-
-Screenshots will be added only after they are captured from the current extension so the Marketplace page does not show mock behavior.
 
 ## Privacy and data handling
 
@@ -233,8 +222,8 @@ Until the public Marketplace listing is available:
 5. Open a project folder.
 6. Select the TMTP icon in the Activity Bar.
 7. Open the Project Graph, Project Overview, or **Where Should I Start?** view.
-8. Choose OpenAI, Anthropic Claude, or Google Gemini and configure its API key only when you want to use the Guided Tour or practice features.
-
+8. Choose OpenAI, Anthropic Claude, or Google Gemini and configure its API key to use Project Graph, the Guided Tour, or practice features.
+<!--
 ### Build from source
 
 Prerequisites: Node.js and pnpm.
@@ -274,7 +263,7 @@ pnpm --filter tmtp test:integration
 
 The current source contains 32 scanner, 28 AI, and 29 extension test cases. Network calls in the AI tests are mocked; no real API key is required.
 
-For package boundaries and design decisions, see [Architecture](docs/architecture.md). For the local development workflow, see [Development Guide](docs/development.md).
+For package boundaries and design decisions, see [Architecture](docs/architecture.md). For the local development workflow, see [Development Guide](docs/development.md). -->
 
 ## Roadmap
 
@@ -290,24 +279,12 @@ Future work is focused on:
 
 See the [project roadmap](docs/roadmap.md) for the longer-term architecture direction. Roadmap items are plans, not current capabilities.
 
-## Contributing
-
-TMTP is early and contributions are welcome, particularly around detector accuracy, import resolution, VS Code UX, testing, and documentation.
-
-1. Fork the repository and create a focused branch.
-2. Install dependencies with `pnpm install`.
-3. Make the smallest coherent change.
-4. Run the relevant package tests and `pnpm build`.
-5. Open a pull request that explains the user problem, implementation, and verification.
-
-Before adding a public capability claim, make sure the behavior is registered, reachable through the product, and covered by an appropriate test.
-
 ## License
 
 No open-source license file has been committed yet. Until the project owner selects and adds a license, the source is publicly visible but no open-source usage rights should be assumed.
 
 ## Project links
 
-<!-- - [Source repository](https://github.com/UnaStaziaBo/TMTP-project-aware-AI-mentor-for-developers) -->
+- [Source repository](https://github.com/UnaStaziaBo/TMTP-project-aware-AI-mentor-for-developers)
 <!-- - [Issue tracker](https://github.com/UnaStaziaBo/TMTP-project-aware-AI-mentor-for-developers/issues) -->
 - [Changelog](CHANGELOG.md)
