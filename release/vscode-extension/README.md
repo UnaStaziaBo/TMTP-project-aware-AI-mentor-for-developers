@@ -2,7 +2,7 @@
 
 ## Contributors
 
-- [Steve Michira](https://github.com/wise-wise) — [Code the Giant](https://codethegiant.vercel.app/)
+- [Steve Michira](https://www.linkedin.com/in/steve-michira-97a280339/) — [Code the Giant](https://codethegiant.vercel.app/)
 
 ### Understand the project before you modify it.
 
@@ -223,7 +223,7 @@ Until the public Marketplace listing is available:
 6. Select the TMTP icon in the Activity Bar.
 7. Open the Project Graph, Project Overview, or **Where Should I Start?** view.
 8. Choose OpenAI, Anthropic Claude, or Google Gemini and configure its API key to use Project Graph, the Guided Tour, or practice features.
-<!--
+<!-- 
 ### Build from source
 
 Prerequisites: Node.js and pnpm.
